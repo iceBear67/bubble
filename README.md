@@ -1,14 +1,16 @@
 # bubble
-[中文](./README-zh.md)
-An SSH daemon that creates or attaches a Docker container based on your username, providing an on-the-fly workspace experience.
+[中文](./README-zh.md)  
+An SSH daemon that select a Docker container based on your username.  
 Work in progress. More tests needed.
+
+![example](example/screenshot.jpg)
 
 # Build
 Ensure you have Go 1.24.1 (tested) and Git installed.
 
 ```bash
 $ git clone https://github.com/iceBear67/bubble
-$ bash ./build.sh
+$ bash ./bubble/build.sh
 building client.go
 building daemon.go
 $ ls target
@@ -78,8 +80,7 @@ templates:
 
 # Client
 
-Once `enable-manager` is enable，A unix socket which is used to communicate with the daemon will appear in `/workspace`.   
-By using the feature via `client` executable, you can destroy or stop the current workspace.
+Once `enable-manager` is enabled，You can use `client` executable to destroy or stop the current workspace.
 ```bash
 $ client
 Usage: client <destroy|stop> 
