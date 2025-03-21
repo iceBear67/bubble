@@ -1,0 +1,5 @@
+target/
+workspace/
+config.yml
+ssh_*
+.idea
