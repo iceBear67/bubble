@@ -1,10 +1,9 @@
 # bubble
 [中文](./README-zh.md)  
-An SSH daemon that select a Docker container based on your username.  
+An SSH daemon that forwards terminal to a docker container, or create a new one on-demand.  
 Work in progress. More tests needed.
 
 ![example](example/screenshot.jpg)
-
 # Build
 Ensure you have Go 1.24.1 (tested) and Git installed.
 
