@@ -49,11 +49,18 @@ func LoadConfig(path *string) (*Config, error) {
 	if err := decoder.Decode(config); err != nil {
 		log.Fatalf("Failed to parse config file: %v", err)
 	}
+	// clean path
 	absPath, err := filepath.Abs(config.WorkspaceData)
 	if err != nil {
 		return nil, err
 	}
 	config.WorkspaceData = absPath
+
+	absPath, err = filepath.Abs(config.GlobalShareDir)
+	if err != nil {
+		return nil, err
+	}
+	config.GlobalShareDir = absPath
 
 	stat, err := os.Stat(config.WorkspaceData)
 	if err != nil {
