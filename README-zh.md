@@ -58,7 +58,7 @@ templates:
 
     # 每次新连接时运行的程序。
     # 提示：建议使用 tmux。
-    exec: "/bin/bash"
+    exec: ["/bin/bash"]
 
     # 环境变量。
     env:

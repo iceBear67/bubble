@@ -216,14 +216,14 @@ func (sctx *SshServerContext) redirectToContainer(
 	nc io.ReadWriteCloser,
 	ctx context.Context,
 	containerID string,
-	cmd string,
+	cmd []string,
 ) {
 	execConfig := container.ExecOptions{
 		Tty:          true,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
-		Cmd:          []string{cmd},
+		Cmd:          cmd,
 	}
 	dockerClient := sctx.DockerClient
 	execResp, err := dockerClient.ContainerExecCreate(ctx, containerID, execConfig)
