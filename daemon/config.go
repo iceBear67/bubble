@@ -22,6 +22,7 @@ type ContainerConfig struct {
 	EnableManager bool     `yaml:"enable-manager"`
 	Image         string   `yaml:"image"`
 	Exec          []string `yaml:"exec"`
+	Cmd           []string `yaml:"cmd"`
 	Env           []string `yaml:"env"`
 	Volumes       []string `yaml:"volumes"`
 	Privilege     bool     `yaml:"privilege"`

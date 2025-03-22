@@ -62,6 +62,8 @@ templates:
     # The program that runs on every new connection.
     # Pro tip: Use tmux.
     exec: ["/bin/bash"]
+    
+    cmd: ['/bin/bash']
 
     # Environment variables.
     env:

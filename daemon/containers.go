@@ -80,7 +80,7 @@ func CreateContainer(
 	containerConfig := &container.Config{
 		Image:    containerTemplate.Image,
 		Tty:      true,
-		Cmd:      containerTemplate.Exec,
+		Cmd:      containerTemplate.Cmd,
 		Hostname: containerName,
 		Env:      containerTemplate.Env,
 	}
