@@ -9,7 +9,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 )
 
 type SshServerContext struct {
@@ -120,16 +119,4 @@ func (sctx *SshServerContext) startSSHServer(sshConfig *ssh.ServerConfig, addres
 		}
 		go connCtx.handleConnection(conn, sshConfig)
 	}
-}
-
-func (sctx *SshServerContext) CreateContainerFromTemplate(user string, template *ContainerConfig) (id string, erro error) {
-	appConfig := sctx.AppConfig
-	workspaceDir := filepath.Join(appConfig.WorkspaceData, user)
-	return CreateContainer(
-		sctx.DockerClient,
-		user,
-		workspaceDir,
-		appConfig.Network,
-		template,
-	)
 }

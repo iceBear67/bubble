@@ -68,6 +68,19 @@ func ContainerExists(dockerClient *client.Client, name string) (exists bool, sta
 	return false, "", ""
 }
 
+func CreateContainerFromTemplate(
+	dockerClient *client.Client, workspaceDir string, networkGroup string,
+	user string, template *ContainerConfig) (id string, erro error) {
+	//workspaceDir := filepath.Join(appConfig.WorkspaceData, user)
+	return CreateContainer(
+		dockerClient,
+		user,
+		workspaceDir,
+		networkGroup,
+		template,
+	)
+}
+
 func CreateContainer(
 	dockerClient *client.Client,
 	user string,
