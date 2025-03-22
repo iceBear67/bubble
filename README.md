@@ -1,9 +1,7 @@
 # bubble
-[中文](./README-zh.md)  
 An SSH daemon that forwards terminal to a docker container, or create a new one on-demand.  
 Work in progress. More tests needed.
 
-![example](example/screenshot.jpg)
 # Build
 Ensure you have Go 1.24.1 (tested) and Git installed.
 
@@ -23,12 +21,18 @@ By default, artifacts are built with CGO disabled, making them runnable without 
 Access to the Docker socket and a pre-generated SSH private key is required.
 
 ```aiignore
-$ ./target/daemon
+$ ./target/daemon -h
 Usage of ./target/daemon:
   -config string
         Path to config file (default "config.yml")
   -help
         Show help
+# ./target/daemon
+(Logs are omitted)
+# ssh test@localhost -p xxxx
+Creating a new container, please wait...
+Redirecting to the new container..
+[root@workspace-test] #
 ```
 
 Example configuration:
@@ -44,9 +48,11 @@ network-group: "workspace"
 # Generate an SSH key pair via: `sshd-keygen -t rsa -b 4096 -f ssh_host_key -N ""`
 server-key-file: "ssh_host_key"
 
-# Newly created workspaces will mount %workspace-data%/%workspace-name% to /workspace. Optional.
+# Newly created workspaces will mount %workspace-parent%/%workspace-name% to /mnt/workspace. Optional.
 # If empty, this feature is disabled.
-workspace-data: "workspace"
+workspace-parent: "workspace"
+
+global-share-dir: "global"
 
 # List of allowed SSH keys (~/.sshd/authorized_keys).
 # If empty, anyone can connect.

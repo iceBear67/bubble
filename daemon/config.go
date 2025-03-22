@@ -10,12 +10,13 @@ import (
 )
 
 type Config struct {
-	Address       string                     `yaml:"address"`
-	Network       string                     `yaml:"network-group"`
-	Keys          []string                   `yaml:"keys"`
-	ServerKey     string                     `yaml:"server-key-file"`
-	WorkspaceData string                     `yaml:"workspace-data"`
-	Templates     map[string]ContainerConfig `yaml:"templates"`
+	Address        string                     `yaml:"address"`
+	Network        string                     `yaml:"network-group"`
+	Keys           []string                   `yaml:"keys"`
+	ServerKey      string                     `yaml:"server-key-file"`
+	WorkspaceData  string                     `yaml:"workspace-parent"`
+	GlobalShareDir string                     `yaml:"global-share-dir"`
+	Templates      map[string]ContainerConfig `yaml:"templates"`
 }
 
 type ContainerConfig struct {
@@ -32,11 +33,12 @@ type ContainerConfig struct {
 func LoadConfig(path *string) (*Config, error) {
 	//todo fill with defaults
 	config := &Config{
-		Address:       ":2233",
-		Network:       "",
-		ServerKey:     "id_rsa",
-		WorkspaceData: filepath.Join(filepath.Dir(*path), "workspace"),
-		Templates:     make(map[string]ContainerConfig),
+		Address:        ":2233",
+		Network:        "",
+		ServerKey:      "id_rsa",
+		WorkspaceData:  "",
+		GlobalShareDir: "",
+		Templates:      make(map[string]ContainerConfig),
 	}
 	file, err := os.Open(*path)
 	if err != nil {

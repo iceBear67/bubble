@@ -15,7 +15,7 @@ const ContainerStatusCreated = "created"
 const ContainerStatusPaused = "paused"
 const ContainerStatusExited = "exited"
 const ContainerStatusUp = "up"
-const InContainerWorkspaceDir = "/workspace"
+const InContainerDataDir = "/mnt/data"
 
 func SetupDockerClient() (*client.Client, error) {
 	var err error
@@ -69,22 +69,10 @@ func ContainerExists(dockerClient *client.Client, name string) (exists bool, sta
 }
 
 func CreateContainerFromTemplate(
-	dockerClient *client.Client, workspaceDir string, networkGroup string,
-	user string, template *ContainerConfig) (id string, erro error) {
-	//workspaceDir := filepath.Join(appConfig.WorkspaceData, user)
-	return CreateContainer(
-		dockerClient,
-		user,
-		workspaceDir,
-		networkGroup,
-		template,
-	)
-}
-
-func CreateContainer(
 	dockerClient *client.Client,
 	user string,
-	workspaceDir string,
+	dataDir string,
+	globalShareDir string,
 	networkGroup string,
 	containerTemplate *ContainerConfig,
 ) (string, error) {
@@ -100,8 +88,11 @@ func CreateContainer(
 	var volumes []string
 	copy(containerTemplate.Volumes, volumes)
 	// todo create management socket
-	if workspaceDir != "" {
-		volumes = append(volumes, workspaceDir+":/workspace")
+	if dataDir != "" {
+		volumes = append(volumes, dataDir+":/mnt/data")
+	}
+	if globalShareDir != "" {
+		volumes = append(volumes, globalShareDir+":/mnt/share")
 	}
 	hostConfig := &container.HostConfig{
 		Binds:      volumes,

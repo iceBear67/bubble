@@ -18,7 +18,7 @@ var (
 	InContainerSocketName  = "daemon.sock"
 	// We won't mount a file into container, we mount the directory instead.
 	// When you're editing here, also take a look at sshd.go # handleSession, where we specified a path to be listened.
-	InContainerSocketPath = path.Join(InContainerWorkspaceDir, InContainerSocketName)
+	InContainerSocketPath = path.Join(InContainerDataDir, InContainerSocketName)
 )
 
 type ManagerContext struct {
