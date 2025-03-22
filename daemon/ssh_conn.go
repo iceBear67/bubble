@@ -108,7 +108,7 @@ func (connCtx *SshConnContext) handleSession(conn net.Conn) {
 		}
 	}
 	connCtx.printTextLn("Redirecting to the container...")
-	connCtx.redirectToContainer(containerID, containerTemplate.Exec)
+	connCtx.redirectToContainer(containerID, containerTemplate.EnableManager, containerTemplate.Exec)
 }
 
 func (connCtx *SshConnContext) initManagerSocket(containerName string, addr string) *ManagerContext {
@@ -153,14 +153,20 @@ func (connCtx *SshConnContext) handleCreateContainer(containerTemplate *Containe
 
 func (connCtx *SshConnContext) redirectToContainer(
 	containerID string,
+	provideSocketEnv bool,
 	cmd []string,
 ) {
+	env := make([]string, 0)
+	if provideSocketEnv {
+		env = append(env, "BUBBLE_SOCK="+InContainerSocketPath)
+	}
 	execConfig := container.ExecOptions{
 		Tty:          true,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          cmd,
+		Env:          env,
 	}
 	sctx := connCtx.ServerContext
 	dockerClient := sctx.DockerClient
