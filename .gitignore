@@ -1,5 +1,6 @@
 target/
 workspace/
 config.yml
-ssh_*
+ssh_host_key
+ssh_host_key.pub
 .idea
