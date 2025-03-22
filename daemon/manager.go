@@ -12,9 +12,9 @@ import (
 )
 
 var (
-	SignalDestroyContainer = []byte{114, 5, 1, 4}
-	SignalStopContainer    = []byte{19, 19, 81, 0}
-	SignalKillContainer    = []byte{07, 21}
+	SignalDestroyContainer = []byte{114}
+	SignalStopContainer    = []byte{19}
+	SignalKillContainer    = []byte{07}
 	InContainerSocketName  = "daemon.sock"
 	// We won't mount a file into container, we mount the directory instead.
 	// When you're editing here, also take a look at sshd.go # handleSession, where we specified a path to be listened.
