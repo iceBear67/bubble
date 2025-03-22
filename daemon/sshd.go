@@ -19,6 +19,7 @@ type SshServerContext struct {
 
 const (
 	ConsoleResizeEvent = 114514
+	ConsolePipeBroken  = 1919810
 )
 
 type ConsoleEvent struct {
@@ -115,6 +116,7 @@ func (sctx *SshServerContext) startSSHServer(sshConfig *ssh.ServerConfig, addres
 		}
 		connCtx := &SshConnContext{
 			ServerContext: sctx,
+			Context:       sctx.Context,
 			Conn:          nil,
 		}
 		go connCtx.handleConnection(conn, sshConfig)
