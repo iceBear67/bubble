@@ -17,12 +17,12 @@ var (
 	SignalKillContainer    = []byte{07, 21}
 	InContainerSocketName  = "daemon.sock"
 	// We won't mount a file into container, we mount the directory instead.
-	// When you're editing here, also take a look at ssh.go # handleSession, where we specified a path to be listened.
+	// When you're editing here, also take a look at sshd.go # handleSession, where we specified a path to be listened.
 	InContainerSocketPath = path.Join(InContainerWorkspaceDir, InContainerSocketName)
 )
 
 type ManagerContext struct {
-	SshContext    *SshServerContext
+	SshContext    *SshConnContext
 	ContainerName string
 	Address       string
 	shuttingDown  bool
@@ -89,11 +89,11 @@ func (ctx *ManagerContext) shutdownGracefully() {
 }
 
 func (ctx *ManagerContext) dockerClient() *client.Client {
-	return ctx.SshContext.DockerClient
+	return ctx.SshContext.ServerContext.DockerClient
 }
 
 func (ctx *ManagerContext) runContext() context.Context {
-	return ctx.SshContext.Context
+	return ctx.SshContext.ServerContext.Context
 }
 
 func (ctx *ManagerContext) destroyContainer() {

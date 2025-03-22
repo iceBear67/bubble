@@ -39,14 +39,14 @@ address: ":2333"
 network-group: "workspace"
 
 # 服务器私钥文件。必填。
-# 生成 SSH 密钥对命令：`ssh-keygen -t rsa -b 4096 -f ssh_host_key -N ""`
+# 生成 SSH 密钥对命令：`sshd-keygen -t rsa -b 4096 -f ssh_host_key -N ""`
 server-key-file: "ssh_host_key"
 
 # 新创建的工作区会将 %workspace-data%/%workspace-name% 挂载到 /workspace。可选。
 # 如果为空，则该功能不会启用。
 workspace-data: "workspace"
 
-# 允许的 SSH 公钥列表（~/.ssh/authorized_keys）。
+# 允许的 SSH 公钥列表（~/.sshd/authorized_keys）。
 # 如果为空，任何人都可以连接。
 keys: []
 

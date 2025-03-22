@@ -42,14 +42,14 @@ address: ":2333"
 network-group: "workspace"
 
 # Server private key file. Required.
-# Generate an SSH key pair via: `ssh-keygen -t rsa -b 4096 -f ssh_host_key -N ""`
+# Generate an SSH key pair via: `sshd-keygen -t rsa -b 4096 -f ssh_host_key -N ""`
 server-key-file: "ssh_host_key"
 
 # Newly created workspaces will mount %workspace-data%/%workspace-name% to /workspace. Optional.
 # If empty, this feature is disabled.
 workspace-data: "workspace"
 
-# List of allowed SSH keys (~/.ssh/authorized_keys).
+# List of allowed SSH keys (~/.sshd/authorized_keys).
 # If empty, anyone can connect.
 keys: []
 
