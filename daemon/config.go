@@ -34,7 +34,7 @@ func LoadConfig(path *string) (*Config, error) {
 		Address:       ":2233",
 		Network:       "",
 		ServerKey:     "id_rsa",
-		WorkspaceData: filepath.Join(*path, "workspace"),
+		WorkspaceData: filepath.Join(filepath.Dir(*path), "workspace"),
 		Templates:     make(map[string]ContainerConfig),
 	}
 	file, err := os.Open(*path)
