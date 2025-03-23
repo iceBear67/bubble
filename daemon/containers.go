@@ -26,7 +26,7 @@ func SetupDockerClient() (*client.Client, error) {
 	return dockerClient, nil
 }
 
-func setupNetworkGroup(client *client.Client, networkName string) {
+func SetupNetworkGroup(client *client.Client, networkName string) {
 	ctx := context.Background()
 	list, err := client.NetworkList(ctx, network.ListOptions{})
 	if err != nil {
@@ -70,14 +70,13 @@ func ContainerExists(dockerClient *client.Client, name string) (exists bool, sta
 
 func CreateContainerFromTemplate(
 	dockerClient *client.Client,
-	user string,
+	containerName string,
 	dataDir string,
 	globalShareDir string,
 	networkGroup string,
 	containerTemplate *ContainerConfig,
 ) (string, error) {
 	ctx := context.Background()
-	containerName := "workspace-" + user
 	containerConfig := &container.Config{
 		Image:    containerTemplate.Image,
 		Tty:      true,
@@ -87,7 +86,6 @@ func CreateContainerFromTemplate(
 	}
 	var volumes []string
 	copy(containerTemplate.Volumes, volumes)
-	// todo create management socket
 	if dataDir != "" {
 		volumes = append(volumes, dataDir+":/mnt/data")
 	}

@@ -2,9 +2,11 @@ package main
 
 import (
 	"bubble/daemon"
+	"bubble/daemon/sshd"
 	"flag"
 	"fmt"
 	"log"
+	"syscall"
 )
 
 func main() {
@@ -24,8 +26,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create Docker client: %v", err)
 	}
+	if config.WorkspaceData != "" {
+		log.Printf("Chroot-ing to workspace data dir")
+		err := syscall.Chroot(config.WorkspaceData)
+		if err != nil {
+			log.Fatalf("Failed to chroot: %v", err)
+		}
+	}
+
 	go func() {
-		daemon.StartSshServer(dockerClient, config)
+		sshd.StartSshServer(dockerClient, config)
 	}()
 	for {
 		_, _ = fmt.Scanln()

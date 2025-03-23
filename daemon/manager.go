@@ -17,18 +17,22 @@ var (
 	SignalKillContainer    = []byte{07}
 	InContainerSocketName  = "daemon.sock"
 	// We won't mount a file into container, we mount the directory instead.
-	// When you're editing here, also take a look at sshd.go # handleSession, where we specified a path to be listened.
+	// When you're editing here, also take a look at sshd.go # handlePtyRequest, where we specified a path to be listened.
 	InContainerSocketPath = path.Join(InContainerDataDir, InContainerSocketName)
 )
 
 type ManagerContext struct {
-	SshContext    *SshConnContext
-	ContainerName string
-	Address       string
-	shuttingDown  bool
+	DockerClient *client.Client
+	Context      context.Context
+	ContainerId  string
+	Address      string
+	ShuttingDown bool
 }
 
 func (ctx *ManagerContext) StartManagementServer() error {
+	if ctx.ShuttingDown {
+		log.Printf("(%v) Attempt to start a shutting down management server!", ctx.ContainerId)
+	}
 	addr := ctx.Address
 	log.Printf("Starting management server on %s", addr)
 	var l net.Listener
@@ -48,12 +52,12 @@ func (ctx *ManagerContext) StartManagementServer() error {
 	}
 	log.Printf("Started.")
 	for {
-		if ctx.shuttingDown {
+		if ctx.ShuttingDown {
 			break
 		}
 		fd, err := l.Accept()
 		if err != nil {
-			log.Printf("(%v) accept error: %v", ctx.ContainerName, err)
+			log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
 		}
 		go ctx.signalServer(fd)
 	}
@@ -69,13 +73,13 @@ func (ctx *ManagerContext) signalServer(c net.Conn) {
 		}
 		switch buf[0] {
 		case SignalDestroyContainer[0]:
-			log.Printf("Received destroy signal from container %v", ctx.ContainerName)
+			log.Printf("Received destroy signal from container %v", ctx.ContainerId)
 			go ctx.destroyContainer()
 		case SignalStopContainer[0]:
-			log.Printf("Received stop signal from container %v", ctx.ContainerName)
+			log.Printf("Received stop signal from container %v", ctx.ContainerId)
 			go ctx.stopContainer()
 		case SignalKillContainer[0]:
-			log.Printf("Received kill signal from container %v", ctx.ContainerName)
+			log.Printf("Received kill signal from container %v", ctx.ContainerId)
 			go ctx.killContainer()
 		}
 		ctx.shutdownGracefully()
@@ -84,49 +88,41 @@ func (ctx *ManagerContext) signalServer(c net.Conn) {
 }
 
 func (ctx *ManagerContext) shutdownGracefully() {
-	ctx.shuttingDown = true
+	ctx.ShuttingDown = true
 	_ = os.Remove(ctx.Address)
 }
 
-func (ctx *ManagerContext) dockerClient() *client.Client {
-	return ctx.SshContext.ServerContext.DockerClient
-}
-
-func (ctx *ManagerContext) runContext() context.Context {
-	return ctx.SshContext.ServerContext.Context
-}
-
 func (ctx *ManagerContext) destroyContainer() {
-	err := ctx.dockerClient().ContainerStop(ctx.runContext(), ctx.ContainerName, container.StopOptions{})
+	err := ctx.DockerClient.ContainerStop(ctx.Context, ctx.ContainerId, container.StopOptions{})
 	if err != nil {
-		log.Printf("(%v) failed to stop container: %v", ctx.ContainerName, err)
+		log.Printf("failed to stop container %v: %v", ctx.ContainerId, err)
 
-		err = ctx.dockerClient().ContainerKill(ctx.runContext(), ctx.ContainerName, "KILL")
+		err = ctx.DockerClient.ContainerKill(ctx.Context, ctx.ContainerId, "KILL")
 		if err != nil {
-			log.Printf("(%v) failed to kill container: %v", ctx.ContainerName, err)
+			log.Printf("failed to kill container %v: %v", ctx.ContainerId, err)
 			return
 		} else {
-			log.Printf("(%v) killed container", ctx.ContainerName)
+			log.Printf("killed container %v", ctx.ContainerId)
 		}
 	}
-	err = ctx.dockerClient().ContainerRemove(ctx.runContext(), ctx.ContainerName, container.RemoveOptions{Force: true})
+	err = ctx.DockerClient.ContainerRemove(ctx.Context, ctx.ContainerId, container.RemoveOptions{Force: true})
 	if err != nil {
-		log.Printf("(%v) failed to remove container: %v", ctx.ContainerName, err)
+		log.Printf("failed to remove container %v: %v", ctx.ContainerId, err)
 		return
 	}
 }
 
 func (ctx *ManagerContext) stopContainer() {
-	err := ctx.dockerClient().ContainerStop(ctx.runContext(), ctx.ContainerName, container.StopOptions{})
+	err := ctx.DockerClient.ContainerStop(ctx.Context, ctx.ContainerId, container.StopOptions{})
 	if err != nil {
-		log.Printf("(%v) failed to stop container: %v", ctx.ContainerName, err)
+		log.Printf("failed to stop container %v: %v", ctx.ContainerId, err)
 	}
 }
 
 func (ctx *ManagerContext) killContainer() {
-	err := ctx.dockerClient().ContainerKill(ctx.runContext(), ctx.ContainerName, "KILL")
+	err := ctx.DockerClient.ContainerKill(ctx.Context, ctx.ContainerId, "KILL")
 	if err != nil {
-		log.Printf("(%v) failed to kill container: %v", ctx.ContainerName, err)
+		log.Printf("failed to kill container %v: %v", ctx.ContainerId, err)
 		return
 	}
 }

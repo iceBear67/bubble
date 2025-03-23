@@ -1,43 +1,29 @@
-package daemon
+package sshd
 
 import (
+	"bubble/daemon"
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"golang.org/x/crypto/ssh"
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 )
 
 type SshServerContext struct {
-	DockerClient *client.Client
-	AppConfig    *Config
 	Context      context.Context
+	DockerClient *client.Client
+	AppConfig    *daemon.Config
+	Chroot       bool
 }
 
-const (
-	ConsoleResizeEvent = 114514
-	ConsolePipeBroken  = 1919810
-)
-
-type ConsoleEvent struct {
-	typeIndex int
-	data      []byte
-}
-
-type SshConnContext struct {
-	ServerContext *SshServerContext
-	Context       context.Context
-	User          string
-	Conn          *ssh.Channel
-	EventLoop     chan *ConsoleEvent
-}
-
-func StartSshServer(client *client.Client, config *Config) {
+func StartSshServer(client *client.Client, config *daemon.Config) {
 	allowedKeys := parseAuthorizedKeys(config.Keys)
-	setupNetworkGroup(client, config.Network)
+	daemon.SetupNetworkGroup(client, config.Network)
 	privateKey := loadPrivateKey(config.ServerKey)
 	sshConfig := setupSSHConfig(privateKey, &allowedKeys)
 	sctx := SshServerContext{
@@ -46,6 +32,14 @@ func StartSshServer(client *client.Client, config *Config) {
 		Context:      context.Background(),
 	}
 	sctx.startSSHServer(sshConfig, config.Address)
+}
+
+func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {
+	if !sctx.Chroot {
+		return filepath.Join(sctx.AppConfig.WorkspaceData, user)
+	} else {
+		return user
+	}
 }
 
 func parseAuthorizedKeys(keys []string) []ssh.PublicKey {
@@ -121,4 +115,48 @@ func (sctx *SshServerContext) startSSHServer(sshConfig *ssh.ServerConfig, addres
 		}
 		go connCtx.handleConnection(conn, sshConfig)
 	}
+}
+
+func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error) {
+	dockerClient := sctx.DockerClient
+	exists, status, containerID := daemon.ContainerExists(dockerClient, containerName)
+	if !exists {
+		_containerID, err := daemon.CreateContainerFromTemplate(
+			dockerClient,
+			containerName,
+			workspaceDir,
+			sctx.AppConfig.GlobalShareDir,
+			sctx.AppConfig.Network,
+			containerTemplate,
+		)
+		if err != nil {
+			log.Println("Failed to create container: ", err)
+			log.Println("Removing error container..")
+			err = sctx.DockerClient.ContainerRemove(sctx.Context, containerName, container.RemoveOptions{})
+			if err != nil {
+				log.Println("Failed to remove container:", err)
+			}
+			return nil, fmt.Errorf("failed to create container: %v", err)
+		}
+		containerID = _containerID
+	}
+	if status != "" {
+		switch status {
+		case daemon.ContainerStatusCreated, daemon.ContainerStatusPaused, daemon.ContainerStatusRunning, daemon.ContainerStatusUp:
+			break
+		case daemon.ContainerStatusExited:
+			// Workaround from issue: https://github.com/docker/cli/issues/1891#issuecomment-581486695
+			// This issue also occurs when you are using normal `docker stop` commands.
+			// so let's disconnect it first.
+			_ = sctx.DockerClient.NetworkDisconnect(sctx.Context, sctx.AppConfig.Network, containerID, true)
+			err := sctx.DockerClient.ContainerStart(sctx.Context, containerID, container.StartOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("failed to start container: %v", err)
+			}
+			break
+		default:
+			return nil, fmt.Errorf("unexpected container status: %v", status)
+		}
+	}
+	return &containerID, nil
 }
