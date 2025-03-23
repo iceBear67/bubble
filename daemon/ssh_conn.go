@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
 	"golang.org/x/crypto/ssh"
@@ -19,6 +20,8 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 	log.Printf("New connection from %s as %s\n", sshConn.RemoteAddr(), sshConn.User())
 	go ssh.DiscardRequests(requests)
 	for newChannel := range channels {
+		log.Printf("Channel type: %v", newChannel.ChannelType())
+		log.Printf("Extra dump: %v", hex.Dump(newChannel.ExtraData()))
 		if newChannel.ChannelType() == "session" {
 			channel, reqs, err := newChannel.Accept()
 			if err != nil {
@@ -28,7 +31,7 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 			connCtx.Conn = &channel
 			connCtx.EventLoop = make(chan *ConsoleEvent)
 			connCtx.User = sshConn.User()
-			go connCtx.handleSession(conn)
+			go connCtx.handleSession(channel)
 			go connCtx.handleRequests(reqs)
 		}
 	}
@@ -60,13 +63,12 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 	}
 }
 
-func (connCtx *SshConnContext) handleSession(conn net.Conn) {
+func (connCtx *SshConnContext) handleSession(conn ssh.Channel) {
 	sctx := connCtx.ServerContext
 	user := connCtx.User
 	containerName := "workspace-" + user //todo refactor
 	containerTemplate, err := sctx.AppConfig.GetTemplateByUser(user)
 	cleanUp := func() {
-		log.Println("Closing connection from ", conn.RemoteAddr())
 		(*connCtx.Conn).Close()
 		conn.Close()
 	}
