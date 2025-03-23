@@ -18,7 +18,6 @@ type SshServerContext struct {
 	Context      context.Context
 	DockerClient *client.Client
 	AppConfig    *daemon.Config
-	Chroot       bool
 }
 
 func StartSshServer(client *client.Client, config *daemon.Config) {
@@ -35,11 +34,7 @@ func StartSshServer(client *client.Client, config *daemon.Config) {
 }
 
 func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {
-	if !sctx.Chroot {
-		return filepath.Join(sctx.AppConfig.WorkspaceData, user)
-	} else {
-		return user
-	}
+	return filepath.Join(sctx.AppConfig.WorkspaceData, user)
 }
 
 func parseAuthorizedKeys(keys []string) []ssh.PublicKey {

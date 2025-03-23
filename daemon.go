@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"syscall"
 )
 
 func main() {
@@ -25,13 +24,6 @@ func main() {
 	dockerClient, err := daemon.SetupDockerClient()
 	if err != nil {
 		log.Fatalf("Failed to create Docker client: %v", err)
-	}
-	if config.WorkspaceData != "" {
-		log.Printf("Chroot-ing to workspace data dir")
-		err := syscall.Chroot(config.WorkspaceData)
-		if err != nil {
-			log.Fatalf("Failed to chroot: %v", err)
-		}
 	}
 
 	go func() {

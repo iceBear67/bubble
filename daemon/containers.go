@@ -85,7 +85,7 @@ func CreateContainerFromTemplate(
 		Env:      containerTemplate.Env,
 	}
 	var volumes []string
-	copy(containerTemplate.Volumes, volumes)
+	copy(volumes, containerTemplate.Volumes)
 	if dataDir != "" {
 		volumes = append(volumes, dataDir+":/mnt/data")
 	}

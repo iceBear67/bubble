@@ -150,11 +150,11 @@ func (connCtx *SshConnContext) eventLoop(exitHandle func(), containerTemplate *d
 		case event.ClientSubsystemRequestEvent:
 			service := evt.SubsystemRequest()
 			var err error
-			switch service {
-			case "sftp":
-				log.Printf("Starting SFTP session for container %v", containerId)
-				err = initSftp(connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User), connCtx)
-			}
+			//switch service {
+			//case "sftp":
+			//	log.Printf("Starting SFTP session for container %v", containerId)
+			//	err = initSftp(connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User), connCtx)
+			//}
 			if err != nil {
 				log.Printf("Cannot initialize %v service for %v: %v", service, connCtx.User, err)
 			}
