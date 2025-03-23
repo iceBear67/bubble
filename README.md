@@ -34,6 +34,7 @@ Creating a new container, please wait...
 Redirecting to the new container..
 [root@workspace-test] #
 ```
+Building your own [workspace image](https://github.com/iceBear67/workspace-docker) is recommended.
 
 Example configuration:
 ```yaml
@@ -61,7 +62,7 @@ keys: []
 # Container configurations based on SSH username.
 templates:
   ".*":  # Regex matching the username.
-    # Pro tip: Build your own workspace image as demonstrated in example/Dockerfile.
+    # Pro tip: Build your own workspace image.
     image: "debian:11"
 
     # The program that runs on every new connection.
