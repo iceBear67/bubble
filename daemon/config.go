@@ -16,6 +16,7 @@ type Config struct {
 	ServerKey       string                     `yaml:"server-key-file"`
 	WorkspaceParent string                     `yaml:"workspace-parent"`
 	GlobalShareDir  string                     `yaml:"global-share-dir"`
+	Runtime         string                     `yaml:"runtime"`
 	Templates       map[string]ContainerConfig `yaml:"templates"`
 }
 
@@ -37,6 +38,7 @@ func LoadConfig(path *string) (*Config, error) {
 		ServerKey:       "id_rsa",
 		WorkspaceParent: "",
 		GlobalShareDir:  "",
+		Runtime:         "",
 		Templates:       make(map[string]ContainerConfig),
 	}
 	file, err := os.Open(*path)

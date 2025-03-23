@@ -122,6 +122,7 @@ func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDi
 			workspaceDir,
 			sctx.AppConfig.GlobalShareDir,
 			sctx.AppConfig.Network,
+			sctx.AppConfig.Runtime,
 			containerTemplate,
 		)
 		if err != nil {

@@ -74,6 +74,7 @@ func CreateContainerFromTemplate(
 	dataDir string,
 	globalShareDir string,
 	networkGroup string,
+	runtime string,
 	containerTemplate *ContainerConfig,
 ) (string, error) {
 	ctx := context.Background()
@@ -96,6 +97,9 @@ func CreateContainerFromTemplate(
 		Binds:      volumes,
 		AutoRemove: containerTemplate.Rm,
 		Privileged: containerTemplate.Privilege,
+	}
+	if runtime != "" {
+		hostConfig.Runtime = runtime
 	}
 	var networkConfig *network.NetworkingConfig = nil
 	if networkGroup != "" {
