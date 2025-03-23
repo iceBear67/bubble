@@ -19,24 +19,19 @@ type SshConnContext struct {
 	EventChannel  chan *event.ConsoleEvent
 }
 
-func (connCtx *SshConnContext) createManagerSocket(containerName string, addr string) *daemon.ManagerContext {
-	mctx := daemon.ManagerContext{
+func (connCtx *SshConnContext) createManagerSocket(containerId string, addr string) *daemon.ManagerContext {
+	ctx, err := daemon.StartManagementServer(
 		connCtx.ServerContext.DockerClient,
 		connCtx.Context,
-		containerName,
-		addr,
-		false,
+		containerId,
+		addr)
+	if err != nil {
+		log.Printf("Failed to start manager socket: %v", err)
 	}
-	go func() {
-		err := mctx.StartManagementServer()
-		if err != nil {
-			log.Printf("Failed to start manager socket: %v", err)
-		}
-	}()
-	return &mctx
+	return ctx
 }
 
-func (c *SshConnContext) redirectToContainer(
+func (c *SshConnContext) RedirectToContainer(
 	containerID string,
 	cmd []string,
 ) (closeHandle func(), execId *string, err error) {
@@ -80,10 +75,10 @@ func (c *SshConnContext) redirectToContainer(
 }
 
 func (connCtx *SshConnContext) logToBoth(msg string) {
-	connCtx.printTextLn(msg)
+	connCtx.PrintTextLn(msg)
 	log.Println(msg)
 }
 
-func (connCtx *SshConnContext) printTextLn(text string) {
+func (connCtx *SshConnContext) PrintTextLn(text string) {
 	_, _ = (*connCtx.Conn).Write([]byte(text + "\r\n"))
 }

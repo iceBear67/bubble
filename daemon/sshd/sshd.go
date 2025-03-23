@@ -34,7 +34,7 @@ func StartSshServer(client *client.Client, config *daemon.Config) {
 }
 
 func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {
-	return filepath.Join(sctx.AppConfig.WorkspaceData, user)
+	return filepath.Join(sctx.AppConfig.WorkspaceParent, user)
 }
 
 func parseAuthorizedKeys(keys []string) []ssh.PublicKey {

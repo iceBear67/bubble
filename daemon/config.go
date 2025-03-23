@@ -10,13 +10,13 @@ import (
 )
 
 type Config struct {
-	Address        string                     `yaml:"address"`
-	Network        string                     `yaml:"network-group"`
-	Keys           []string                   `yaml:"keys"`
-	ServerKey      string                     `yaml:"server-key-file"`
-	WorkspaceData  string                     `yaml:"workspace-parent"`
-	GlobalShareDir string                     `yaml:"global-share-dir"`
-	Templates      map[string]ContainerConfig `yaml:"templates"`
+	Address         string                     `yaml:"address"`
+	Network         string                     `yaml:"network-group"`
+	Keys            []string                   `yaml:"keys"`
+	ServerKey       string                     `yaml:"server-key-file"`
+	WorkspaceParent string                     `yaml:"workspace-parent"`
+	GlobalShareDir  string                     `yaml:"global-share-dir"`
+	Templates       map[string]ContainerConfig `yaml:"templates"`
 }
 
 type ContainerConfig struct {
@@ -31,14 +31,13 @@ type ContainerConfig struct {
 }
 
 func LoadConfig(path *string) (*Config, error) {
-	//todo fill with defaults
 	config := &Config{
-		Address:        ":2233",
-		Network:        "",
-		ServerKey:      "id_rsa",
-		WorkspaceData:  "",
-		GlobalShareDir: "",
-		Templates:      make(map[string]ContainerConfig),
+		Address:         ":2233",
+		Network:         "",
+		ServerKey:       "id_rsa",
+		WorkspaceParent: "",
+		GlobalShareDir:  "",
+		Templates:       make(map[string]ContainerConfig),
 	}
 	file, err := os.Open(*path)
 	if err != nil {
@@ -50,33 +49,23 @@ func LoadConfig(path *string) (*Config, error) {
 		log.Fatalf("Failed to parse config file: %v", err)
 	}
 	// clean path
-	absPath, err := filepath.Abs(config.WorkspaceData)
-	if err != nil {
-		return nil, err
-	}
-	config.WorkspaceData = absPath
-
-	absPath, err = filepath.Abs(config.GlobalShareDir)
-	if err != nil {
-		return nil, err
-	}
-	config.GlobalShareDir = absPath
-
-	stat, err := os.Stat(config.WorkspaceData)
-	if err != nil {
-		if os.IsNotExist(err) {
-			err = os.MkdirAll(config.WorkspaceData, 0600)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create data directory: %v", err)
-			}
-		} else {
+	if config.WorkspaceParent != "" {
+		config.WorkspaceParent, err = initAbsFolder(config.WorkspaceParent)
+		if err != nil {
 			return nil, err
 		}
+		log.Printf("Workspace parent: %s", config.WorkspaceParent)
 	}
-	if !stat.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", config.WorkspaceData)
+
+	if config.GlobalShareDir != "" {
+		config.GlobalShareDir, err = initAbsFolder(config.GlobalShareDir)
+		if err != nil {
+			return nil, err
+		}
+		log.Printf("Global sharepoint: %s", config.GlobalShareDir)
 	}
-	if config.WorkspaceData == "" {
+
+	if config.WorkspaceParent == "" {
 		for _, containerConfig := range config.Templates {
 			if containerConfig.EnableManager {
 				return nil, fmt.Errorf("enable-manager depends on workspace-data feature.")
@@ -84,6 +73,27 @@ func LoadConfig(path *string) (*Config, error) {
 		}
 	}
 	return config, nil
+}
+
+func initAbsFolder(relPath string) (string, error) {
+	absPath, err := filepath.Abs(relPath)
+	if err != nil {
+		return "", err
+	}
+	stat, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(absPath, 0600)
+			if err != nil {
+				return "", fmt.Errorf("failed to create data directory: %v", err)
+			}
+		} else {
+			return "", err
+		}
+	} else if !stat.IsDir() {
+		return "", fmt.Errorf("%s is not a directory", absPath)
+	}
+	return absPath, nil
 }
 
 func (c *Config) GetTemplateByUser(user string) (*ContainerConfig, error) {

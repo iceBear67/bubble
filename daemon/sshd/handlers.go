@@ -107,7 +107,6 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 			cmd := strings.Split(cmd_s, " ")
 			connCtx.EventChannel <- event.NewExecEvent(true, cmd)
 		default:
-			// todo support exec?
 			log.Printf("(%v) Unknown request type: %v", connCtx.User, req.Type)
 			_ = req.Reply(false, nil)
 		}
@@ -159,7 +158,7 @@ func (connCtx *SshConnContext) eventLoop(exitHandle func(), containerTemplate *d
 				log.Printf("Cannot initialize %v service for %v: %v", service, connCtx.User, err)
 			}
 		case event.ContainerManagerEnableEvent:
-			workspaceDataDir := connCtx.ServerContext.AppConfig.WorkspaceData
+			workspaceDataDir := connCtx.ServerContext.AppConfig.WorkspaceParent
 			if workspaceDataDir == "" {
 				log.Printf("(%v) Error: management socket depends on the workspace volume, which isn't mounted.")
 				break
@@ -186,7 +185,7 @@ func (ptys *PtySession) onPtyEvent(evt *event.ConsoleEvent, containerTemplate *d
 	case event.ClientExecEvent:
 		silent, exec := evt.ExecEvent()
 		if !silent {
-			connCtx.printTextLn("Redirecting to the container...")
+			connCtx.PrintTextLn("Redirecting to the container...")
 		}
 		if exec == nil {
 			exec = containerTemplate.Exec
@@ -195,7 +194,7 @@ func (ptys *PtySession) onPtyEvent(evt *event.ConsoleEvent, containerTemplate *d
 		if ptys.lastCloseHandle != nil {
 			ptys.lastCloseHandle()
 		}
-		closeHandle, execId, err := connCtx.redirectToContainer(ptys.containerId, exec)
+		closeHandle, execId, err := connCtx.RedirectToContainer(ptys.containerId, exec)
 		if err != nil {
 			connCtx.logToBoth(fmt.Sprintf("(%v) Failed to redirect to container: %v", ptys.containerId, err))
 			return err

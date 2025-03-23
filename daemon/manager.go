@@ -9,6 +9,8 @@ import (
 	"os"
 	"path"
 	"strings"
+	"sync"
+	"sync/atomic"
 )
 
 var (
@@ -26,17 +28,52 @@ type ManagerContext struct {
 	Context      context.Context
 	ContainerId  string
 	Address      string
-	ShuttingDown bool
+	shuttingDown bool
+	listener     *net.Listener
 }
 
-func (ctx *ManagerContext) StartManagementServer() error {
-	if ctx.ShuttingDown {
+var runningManagers = sync.Map{}
+var managers = atomic.Int32{}
+
+func GetManagerByContainerId(containerId string) *ManagerContext {
+	v, _ := runningManagers.Load(containerId)
+	if v == nil {
+		return nil
+	}
+	return v.(*ManagerContext)
+}
+
+func HasRunningManager() bool {
+	return managers.Load() != 0
+}
+
+func GetRunningManagers() *sync.Map {
+	return &runningManagers
+}
+
+func StartManagementServer(docker *client.Client, context context.Context, containerId string, address string) (*ManagerContext, error) {
+	ctx := ManagerContext{
+		docker,
+		context,
+		containerId,
+		address,
+		false,
+		nil,
+	}
+
+	v, _ := runningManagers.Load(containerId)
+	if v != nil {
+		return nil, nil
+	}
+	if ctx.shuttingDown {
 		log.Printf("(%v) Attempt to start a shutting down management server!", ctx.ContainerId)
 	}
 	addr := ctx.Address
 	log.Printf("Starting management server on %s", addr)
 	var l net.Listener
+	ctx.listener = &l
 	var err error
+	// todo check socket file not exist
 	for {
 		l, err = net.Listen("unix", addr)
 		if err == nil && l != nil {
@@ -46,22 +83,31 @@ func (ctx *ManagerContext) StartManagementServer() error {
 			_err := os.Remove(addr)
 			if _err != nil {
 				log.Printf("Cannot remove old socket: %s", _err)
-				return err
+				return nil, err
 			}
 		}
 	}
+
+	go func() {
+		for {
+			fd, err := l.Accept()
+			if err != nil {
+				if ctx.shuttingDown {
+					return
+				}
+				log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
+			}
+			go ctx.signalServer(fd)
+		}
+	}()
+	runningManagers.Store(ctx.ContainerId, &ctx)
+	managers.Add(1)
 	log.Printf("Started.")
-	for {
-		if ctx.ShuttingDown {
-			break
-		}
-		fd, err := l.Accept()
-		if err != nil {
-			log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
-		}
-		go ctx.signalServer(fd)
-	}
-	return nil
+	return &ctx, nil
+}
+
+func (ctx *ManagerContext) IsShuttingDown() bool {
+	return ctx.shuttingDown
 }
 
 func (ctx *ManagerContext) signalServer(c net.Conn) {
@@ -82,14 +128,17 @@ func (ctx *ManagerContext) signalServer(c net.Conn) {
 			log.Printf("Received kill signal from container %v", ctx.ContainerId)
 			go ctx.killContainer()
 		}
-		ctx.shutdownGracefully()
+		ctx.ShutdownGracefully()
 		break // don't receive more signals.
 	}
 }
 
-func (ctx *ManagerContext) shutdownGracefully() {
-	ctx.ShuttingDown = true
+func (ctx *ManagerContext) ShutdownGracefully() {
+	ctx.shuttingDown = true
+	_ = (*ctx.listener).Close()
 	_ = os.Remove(ctx.Address)
+	runningManagers.Delete(ctx.ContainerId)
+	managers.Add(-1)
 }
 
 func (ctx *ManagerContext) destroyContainer() {

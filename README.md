@@ -92,3 +92,7 @@ Once `enable-manager` is enabled，You can use `client` executable to destroy or
 $ client
 Usage: client <destroy|stop> 
 ```
+
+# Roadmap
+ - Support SFTP.
+ - Port mapping
