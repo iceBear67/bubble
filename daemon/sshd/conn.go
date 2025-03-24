@@ -2,7 +2,7 @@ package sshd
 
 import (
 	"bubble/daemon"
-	"bubble/daemon/event"
+	"bubble/daemon/manager"
 	"context"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
@@ -13,16 +13,17 @@ import (
 
 type SshConnContext struct {
 	ServerContext *SshServerContext
-	Context       context.Context
+	context       context.Context
 	User          string
 	Conn          *ssh.Channel
-	EventChannel  chan *event.ConsoleEvent
+	EventChannel  chan *daemon.ServerEvent
 }
 
-func (connCtx *SshConnContext) createManagerSocket(containerId string, addr string) *daemon.ManagerContext {
-	ctx, err := daemon.StartManagementServer(
+func (connCtx *SshConnContext) createManagerSocket(containerId string, addr string) *manager.ManagerContext {
+	ctx, err := manager.StartManagementServer(
 		connCtx.ServerContext.DockerClient,
-		connCtx.Context,
+		connCtx.context,
+		connCtx.EventChannel,
 		containerId,
 		addr)
 	if err != nil {
@@ -31,12 +32,12 @@ func (connCtx *SshConnContext) createManagerSocket(containerId string, addr stri
 	return ctx
 }
 
-func (c *SshConnContext) RedirectToContainer(
+func (connCtx *SshConnContext) RedirectToContainer(
 	containerID string,
 	cmd []string,
 ) (closeHandle func(), execId *string, err error) {
 	env := make([]string, 0)
-	env = append(env, "BUBBLE_SOCK="+daemon.InContainerSocketPath)
+	env = append(env, "BUBBLE_SOCK="+manager.InContainerSocketPath)
 	//todo more env
 	execConfig := container.ExecOptions{
 		Tty:          true,
@@ -46,28 +47,28 @@ func (c *SshConnContext) RedirectToContainer(
 		Cmd:          cmd,
 		Env:          env,
 	}
-	sctx := c.ServerContext
+	sctx := connCtx.ServerContext
 	dockerClient := sctx.DockerClient
-	execResp, err := dockerClient.ContainerExecCreate(sctx.Context, containerID, execConfig)
+	execResp, err := dockerClient.ContainerExecCreate(sctx.context, containerID, execConfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error occurred while exec-ing! %v\n", err)
 	}
 	id := execResp.ID
 
-	hijackedResp, err := dockerClient.ContainerExecAttach(sctx.Context, id, container.ExecStartOptions{Tty: true})
+	hijackedResp, err := dockerClient.ContainerExecAttach(sctx.context, id, container.ExecStartOptions{Tty: true})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to attach instance! %v\n", err)
 	}
 
 	// these io.Copy are expected to close at the same time.
-	conn := c.Conn
+	conn := connCtx.Conn
 	go func() {
 		_, _ = io.Copy(hijackedResp.Conn, *conn)
 		_ = hijackedResp.CloseWrite()
 	}()
 	go func() {
 		_, _ = io.Copy(*conn, hijackedResp.Reader)
-		c.EventChannel <- event.NewBrokenPipeEvent(id)
+		connCtx.EventChannel <- NewBrokenPipeEvent(id)
 	}()
 	return func() {
 		hijackedResp.Close()

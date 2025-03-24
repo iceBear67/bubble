@@ -2,7 +2,7 @@ package sshd
 
 import (
 	"bubble/daemon"
-	"bubble/daemon/event"
+	"bubble/daemon/manager"
 	"encoding/binary"
 	"fmt"
 	"github.com/docker/docker/api/types/container"
@@ -20,11 +20,14 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		return
 	}
 	log.Printf("New connection from %s as %s\n", sshConn.RemoteAddr(), sshConn.User())
+	connCtx.ServerContext.EventChannel <- NewConnectionEstablishedEvent(connCtx)
+	go connCtx.signalHandler(conn)
 	exitHandle := func() {
 		err := (conn).Close()
-		if err != nil {
+		if err != nil && !connCtx.ServerContext.shuttingDown {
 			log.Printf("Failed to close connection: %v", err)
 		}
+		connCtx.ServerContext.EventChannel <- NewConnectionLostEvent(connCtx)
 	}
 	go ssh.DiscardRequests(_requests)
 	for newChannel := range channels {
@@ -32,21 +35,33 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		if newChannel.ChannelType() == "session" {
 			channel, reqs, err := newChannel.Accept()
 			if err != nil {
+				if connCtx.ServerContext.shuttingDown {
+					return
+				}
 				log.Println("Failed to accept channel:", err)
 				continue
 			}
 			connCtx.Conn = &channel
 			connCtx.User = sshConn.User()
-			connCtx.EventChannel = make(chan *event.ConsoleEvent, 4)
+			connCtx.EventChannel = make(chan *daemon.ServerEvent, 4)
 			containerId, containerTemplate, err := connCtx.prepareSession()
 			if err != nil || containerId == nil {
-				connCtx.logToBoth(fmt.Sprintf("Failed to handle session:", err))
+				connCtx.logToBoth(fmt.Sprintf("Failed to handle session: %v", err))
+				exitHandle()
 				return
 			}
 
 			go connCtx.handleRequests(reqs)
 			connCtx.eventLoop(exitHandle, containerTemplate, *containerId)
+			return
 		}
+	}
+}
+
+func (connCtx *SshConnContext) signalHandler(listener net.Conn) {
+	select {
+	case <-connCtx.context.Done():
+		_ = listener.Close()
 	}
 }
 
@@ -59,13 +74,13 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		log.Printf("Cannot find template for channel issued by %v: %v\n", connCtx.User, err)
 		return
 	}
-	log.Printf("Preparing container for %v...", connCtx.User)
+	connCtx.logToBoth(fmt.Sprintf("Preparing container for %v...", connCtx.User))
 	containerId, erro := connCtx.ServerContext.PrepareContainer(
 		containerName,
 		connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
 		containerTemplate)
 	if containerTemplate.EnableManager {
-		connCtx.EventChannel <- event.NewEnableManager()
+		connCtx.EventChannel <- manager.NewEnableManagerEvent()
 	}
 	if erro != nil {
 		erro = fmt.Errorf("error while preparing container: %v", erro)
@@ -84,13 +99,13 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 		case "pty-req":
 			if !hasPty {
 				hasPty = true // then create for it!
-				connCtx.EventChannel <- event.NewExecEvent(false, nil)
+				connCtx.EventChannel <- NewExecEvent(false, nil)
 			}
 			termLen := req.Payload[3]
-			connCtx.EventChannel <- event.NewResizeEvent(req.Payload[termLen+4:])
+			connCtx.EventChannel <- NewResizeEvent(req.Payload[termLen+4:])
 			_ = req.Reply(true, nil)
 		case "window-change":
-			connCtx.EventChannel <- event.NewResizeEvent(req.Payload)
+			connCtx.EventChannel <- NewResizeEvent(req.Payload)
 		case "subsystem":
 			_ = req.Reply(true, nil)
 			err := connCtx.handleSubsystemRequest(req)
@@ -105,7 +120,7 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 			}
 			cmd_s := string(req.Payload[4 : 4+command_len])
 			cmd := strings.Split(cmd_s, " ")
-			connCtx.EventChannel <- event.NewExecEvent(true, cmd)
+			connCtx.EventChannel <- NewExecEvent(true, cmd)
 		default:
 			log.Printf("(%v) Unknown request type: %v", connCtx.User, req.Type)
 			_ = req.Reply(false, nil)
@@ -119,7 +134,7 @@ func (connCtx *SshConnContext) handleSubsystemRequest(req *ssh.Request) error {
 		return fmt.Errorf("illegal packet length found from user %v, conn %v", connCtx.User, connCtx.Conn)
 	}
 	name := string(req.Payload[4 : 4+nameLen])
-	connCtx.EventChannel <- event.NewSubsystemRequest(name)
+	connCtx.EventChannel <- NewSubsystemRequest(name)
 	return nil
 }
 
@@ -140,50 +155,47 @@ func (connCtx *SshConnContext) eventLoop(exitHandle func(), containerTemplate *d
 	}
 	for evt := range connCtx.EventChannel {
 		switch evt.Type() {
-		case event.ClientExecEvent, event.ClientResizeEvent, event.ClientPipeBrokenEvent:
+		case ClientExecEvent, ClientResizeEvent, ClientPipeBrokenEvent:
 			err := pty.onPtyEvent(evt, containerTemplate)
 			if err != nil {
-				log.Printf("(%v) Connection closed, message: %v", connCtx.User, err)
+				if !connCtx.ServerContext.shuttingDown {
+					log.Printf("(%v) Connection closed, message: %v", connCtx.User, err)
+				}
 				return
 			}
-		case event.ClientSubsystemRequestEvent:
-			service := evt.SubsystemRequest()
-			var err error
-			//switch service {
-			//case "sftp":
-			//	log.Printf("Starting SFTP session for container %v", containerId)
-			//	err = initSftp(connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User), connCtx)
-			//}
-			if err != nil {
-				log.Printf("Cannot initialize %v service for %v: %v", service, connCtx.User, err)
-			}
-		case event.ContainerManagerEnableEvent:
+		case ClientSubsystemRequestEvent:
+			service := SubsystemRequest(evt)
+			log.Printf("(%v) Received a subsystem request for %v, but unsupported yet :(", connCtx.User, service)
+		case manager.ContainerManagerEnableEvent:
 			workspaceDataDir := connCtx.ServerContext.AppConfig.WorkspaceParent
 			if workspaceDataDir == "" {
-				log.Printf("(%v) Error: management socket depends on the workspace volume, which isn't mounted.")
+				log.Printf("(%v) Error: management socket depends on the workspace volume, which isn't mounted.", connCtx.User)
 				break
 			}
 			connCtx.createManagerSocket(containerId,
 				filepath.Join(
 					connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
-					daemon.InContainerSocketName),
+					manager.InContainerSocketName),
 			)
+		case manager.ManagerSocketCloseEvent, manager.ManagerSocketOpenEvent:
+			// forward to upstream.
+			connCtx.ServerContext.EventChannel <- evt
 		}
 	}
 }
 
-func (ptys *PtySession) onPtyEvent(evt *event.ConsoleEvent, containerTemplate *daemon.ContainerConfig) error {
+func (ptys *PtySession) onPtyEvent(evt *daemon.ServerEvent, containerTemplate *daemon.ContainerConfig) error {
 	connCtx := ptys.connCtx
 	switch evt.Type() {
-	case event.ClientPipeBrokenEvent:
-		execId := evt.BrokenPipeEvent()
+	case ClientPipeBrokenEvent:
+		execId := BrokenPipeEvent(evt)
 		if execId == *ptys.lastExecId {
 			return fmt.Errorf("pipe is broken: %v", execId)
 		} else {
 			log.Printf("(%v) Pty exec switch detected.", connCtx.User)
 		}
-	case event.ClientExecEvent:
-		silent, exec := evt.ExecEvent()
+	case ClientExecEvent:
+		silent, exec := ExecEvent(evt)
 		if !silent {
 			connCtx.PrintTextLn("Redirecting to the container...")
 		}
@@ -201,13 +213,13 @@ func (ptys *PtySession) onPtyEvent(evt *event.ConsoleEvent, containerTemplate *d
 		}
 		ptys.lastExecId = execId
 		ptys.lastCloseHandle = closeHandle
-	case event.ClientResizeEvent:
+	case ClientResizeEvent:
 		if ptys.lastExecId == nil {
 			log.Printf("Cannot perform pty resize for %v since no pty is attached.", connCtx.User)
 			return nil
 		}
-		w, h := evt.ResizeEvent()
-		err := connCtx.ServerContext.DockerClient.ContainerExecResize(connCtx.Context, *ptys.lastExecId, container.ResizeOptions{
+		w, h := ResizeEvent(evt)
+		err := connCtx.ServerContext.DockerClient.ContainerExecResize(connCtx.context, *ptys.lastExecId, container.ResizeOptions{
 			Height: h,
 			Width:  w,
 		})

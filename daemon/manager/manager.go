@@ -1,6 +1,7 @@
-package daemon
+package manager
 
 import (
+	"bubble/daemon"
 	"context"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
@@ -9,8 +10,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"sync"
-	"sync/atomic"
 )
 
 var (
@@ -18,9 +17,7 @@ var (
 	SignalStopContainer    = []byte{19}
 	SignalKillContainer    = []byte{07}
 	InContainerSocketName  = "daemon.sock"
-	// We won't mount a file into container, we mount the directory instead.
-	// When you're editing here, also take a look at sshd.go # handlePtyRequest, where we specified a path to be listened.
-	InContainerSocketPath = path.Join(InContainerDataDir, InContainerSocketName)
+	InContainerSocketPath  = path.Join(daemon.InContainerDataDir, InContainerSocketName)
 )
 
 type ManagerContext struct {
@@ -32,26 +29,12 @@ type ManagerContext struct {
 	listener     *net.Listener
 }
 
-var runningManagers = sync.Map{}
-var managers = atomic.Int32{}
-
-func GetManagerByContainerId(containerId string) *ManagerContext {
-	v, _ := runningManagers.Load(containerId)
-	if v == nil {
-		return nil
-	}
-	return v.(*ManagerContext)
-}
-
-func HasRunningManager() bool {
-	return managers.Load() != 0
-}
-
-func GetRunningManagers() *sync.Map {
-	return &runningManagers
-}
-
-func StartManagementServer(docker *client.Client, context context.Context, containerId string, address string) (*ManagerContext, error) {
+func StartManagementServer(
+	docker *client.Client,
+	context context.Context,
+	eventChannel chan *daemon.ServerEvent,
+	containerId string,
+	address string) (*ManagerContext, error) {
 	ctx := ManagerContext{
 		docker,
 		context,
@@ -60,20 +43,11 @@ func StartManagementServer(docker *client.Client, context context.Context, conta
 		false,
 		nil,
 	}
-
-	v, _ := runningManagers.Load(containerId)
-	if v != nil {
-		return nil, nil
-	}
-	if ctx.shuttingDown {
-		log.Printf("(%v) Attempt to start a shutting down management server!", ctx.ContainerId)
-	}
 	addr := ctx.Address
 	log.Printf("Starting management server on %s", addr)
 	var l net.Listener
 	ctx.listener = &l
 	var err error
-	// todo check socket file not exist
 	for {
 		l, err = net.Listen("unix", addr)
 		if err == nil && l != nil {
@@ -88,22 +62,37 @@ func StartManagementServer(docker *client.Client, context context.Context, conta
 		}
 	}
 
+	go acceptLoop(l, &ctx, address, eventChannel)
+	if eventChannel != nil {
+		eventChannel <- NewManagerSocketOpenEvent(&ctx)
+	}
+	log.Printf("Started.")
 	go func() {
-		for {
-			fd, err := l.Accept()
-			if err != nil {
-				if ctx.shuttingDown {
-					return
-				}
-				log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
-			}
-			go ctx.signalServer(fd)
+		select {
+		case <-context.Done():
+			ctx.shutdownGracefully()
 		}
 	}()
-	runningManagers.Store(ctx.ContainerId, &ctx)
-	managers.Add(1)
-	log.Printf("Started.")
 	return &ctx, nil
+}
+
+func acceptLoop(l net.Listener, ctx *ManagerContext, address string, eventChannel chan *daemon.ServerEvent) {
+	for {
+		fd, err := l.Accept()
+
+		if ctx.shuttingDown {
+			log.Printf("Shutting down management server at %v", address)
+			if eventChannel != nil {
+				eventChannel <- NewManagerSocketCloseEvent(ctx)
+			}
+			return
+		}
+		if err != nil {
+			log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
+			continue
+		}
+		go ctx.signalServer(fd)
+	}
 }
 
 func (ctx *ManagerContext) IsShuttingDown() bool {
@@ -128,17 +117,18 @@ func (ctx *ManagerContext) signalServer(c net.Conn) {
 			log.Printf("Received kill signal from container %v", ctx.ContainerId)
 			go ctx.killContainer()
 		}
-		ctx.ShutdownGracefully()
+		ctx.shutdownGracefully()
 		break // don't receive more signals.
 	}
 }
 
-func (ctx *ManagerContext) ShutdownGracefully() {
+func (ctx *ManagerContext) shutdownGracefully() {
+	if ctx.shuttingDown {
+		return
+	}
 	ctx.shuttingDown = true
 	_ = (*ctx.listener).Close()
 	_ = os.Remove(ctx.Address)
-	runningManagers.Delete(ctx.ContainerId)
-	managers.Add(-1)
 }
 
 func (ctx *ManagerContext) destroyContainer() {

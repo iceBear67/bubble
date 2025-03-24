@@ -1,14 +1,14 @@
 package main
 
 import (
-	"bubble/daemon"
+	"bubble/daemon/manager"
 	"log"
 	"net"
 	"os"
 )
 
 func main() {
-	c, err := net.Dial("unix", daemon.InContainerSocketPath)
+	c, err := net.Dial("unix", manager.InContainerSocketPath)
 	if err != nil {
 		log.Println("Can't connect to daemon: ", err)
 		return
@@ -21,10 +21,10 @@ func main() {
 	cmd := os.Args[1]
 	switch cmd {
 	case "destroy":
-		_, err = c.Write(daemon.SignalDestroyContainer)
+		_, err = c.Write(manager.SignalDestroyContainer)
 	case "stop":
 		log.Println("Reconnect using the same user name for a restart.")
-		_, err = c.Write(daemon.SignalStopContainer)
+		_, err = c.Write(manager.SignalStopContainer)
 	} //todo suuuupppppoooorrrrtttt restart without disconnection
 	if err != nil {
 		log.Fatalf("Signal did not sent successfully: %v", err)

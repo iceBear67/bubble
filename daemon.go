@@ -3,12 +3,13 @@ package main
 import (
 	"bubble/daemon"
 	"bubble/daemon/sshd"
+	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
-	"time"
 )
 
 func main() {
@@ -28,34 +29,26 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create Docker client: %v", err)
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 
-	go func() {
-		sshd.StartSshServer(dockerClient, config)
-	}()
+	waitGroup := &sync.WaitGroup{}
+	go sshd.StartSshServer(waitGroup, ctx, dockerClient, config)
+
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	signalHandler(sigChan)
+	signalHandler(waitGroup, cancel, sigChan)
 }
 
-func signalHandler(sigChan chan os.Signal) {
+func signalHandler(wg *sync.WaitGroup, cancel func(), sigChan chan os.Signal) {
 	sign := <-sigChan
 	switch sign {
 	case syscall.SIGINT, syscall.SIGTERM:
-		managers := daemon.GetRunningManagers()
-		managers.Range(func(key, value interface{}) bool {
-			ctx := value.(*daemon.ManagerContext)
-			if !ctx.IsShuttingDown() {
-				log.Println("Removing manager socket from ", key.(string))
-				ctx.ShutdownGracefully()
-			}
-			return true
-		})
-		for {
-			if !daemon.HasRunningManager() {
-				return
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		log.Println("Shutting down...")
+		cancel()
+		wg.Wait()
+		return
+	default:
+		log.Println("Unknown signal ", sign.String())
 	}
 
 }
