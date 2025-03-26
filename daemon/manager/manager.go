@@ -7,9 +7,17 @@ import (
 	"github.com/docker/docker/client"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path"
 	"strings"
+)
+
+const (
+	containerMethodKill       = "KILL"
+	containerMethodStop       = "STOP"
+	containerMethodDestroy    = "DESTROY"
+	containerMethodExposePort = "PORT"
 )
 
 var (
@@ -58,8 +66,17 @@ func StartManagementServer(
 			}
 		}
 	}
-
-	go acceptLoop(l, &ctx, address, eventChannel)
+	var server *http.Server
+	go func() {
+		server = &http.Server{
+			Handler: &ctx,
+		}
+		err = server.Serve(l)
+		if err != nil && !ctx.shuttingDown {
+			log.Printf("Cannot start management server on %s: %v", ctx.Address, err)
+		}
+		eventChannel <- NewManagerSocketCloseEvent(&ctx)
+	}()
 	if eventChannel != nil {
 		eventChannel <- NewManagerSocketOpenEvent(&ctx)
 	}
@@ -67,70 +84,32 @@ func StartManagementServer(
 	go func() {
 		select {
 		case <-context.Done():
-			ctx.shutdownGracefully()
+			if ctx.shuttingDown {
+				return
+			}
+			ctx.shuttingDown = true
+			if err := server.Shutdown(ctx.Context); err != nil {
+				log.Printf("Cannot shutdown management server gracefully: %v", err)
+			}
+			_ = os.Remove(ctx.Address)
 		}
 	}()
 	return &ctx, nil
 }
 
-func acceptLoop(l net.Listener, ctx *ManagerContext, address string, eventChannel chan *daemon.ServerEvent) {
-	for {
-		fd, err := l.Accept()
-
-		if ctx.shuttingDown {
-			log.Printf("Shutting down management server at %v", address)
-			if eventChannel != nil {
-				eventChannel <- NewManagerSocketCloseEvent(ctx)
-			}
-			return
-		}
-		if err != nil {
-			log.Printf("accept error from container %v: %v", ctx.ContainerId, err)
-			continue
-		}
-		go ctx.signalServer(fd)
+func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case "STOP":
+		ctx.stopContainer()
+	case "DESTROY":
+		ctx.destroyContainer()
+	case "KILL":
+		ctx.killContainer()
 	}
 }
 
 func (ctx *ManagerContext) IsShuttingDown() bool {
 	return ctx.shuttingDown
-}
-
-func (ctx *ManagerContext) signalServer(c net.Conn) {
-	for {
-		buf := make([]byte, 1024)
-		daemon.Unmarshal()
-	}
-
-	buf := make([]byte, 1)
-	for {
-		_, err := c.Read(buf)
-		if err != nil {
-			return
-		}
-		switch buf[0] {
-		case SignalDestroyContainer[0]:
-			log.Printf("Received destroy signal from container %v", ctx.ContainerId)
-			go ctx.destroyContainer()
-		case SignalStopContainer[0]:
-			log.Printf("Received stop signal from container %v", ctx.ContainerId)
-			go ctx.stopContainer()
-		case SignalKillContainer[0]:
-			log.Printf("Received kill signal from container %v", ctx.ContainerId)
-			go ctx.killContainer()
-		}
-		ctx.shutdownGracefully()
-		break // don't receive more signals.
-	}
-}
-
-func (ctx *ManagerContext) shutdownGracefully() {
-	if ctx.shuttingDown {
-		return
-	}
-	ctx.shuttingDown = true
-	_ = (*ctx.listener).Close()
-	_ = os.Remove(ctx.Address)
 }
 
 func (ctx *ManagerContext) destroyContainer() {
