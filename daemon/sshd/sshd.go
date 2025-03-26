@@ -128,11 +128,13 @@ func (sctx *SshServerContext) startSSHServer(sshConfig *ssh.ServerConfig, addres
 func (sctx *SshServerContext) signalListener(listener net.Listener) {
 	select {
 	case <-sctx.context.Done():
-		sctx.shuttingDown = true
-		_ = listener.Close()
-		sctx.wg.Wait()
-		close(sctx.EventChannel)
-		return
+		{
+			log.Println("Shutting down ssh server...")
+			sctx.shuttingDown = true
+			_ = listener.Close()
+			sctx.wg.Wait()
+			close(sctx.EventChannel)
+		}
 	}
 }
 
