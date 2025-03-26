@@ -27,7 +27,6 @@ type SshServerContext struct {
 
 func StartSshServer(waitGroup *sync.WaitGroup, context context.Context, client *client.Client, config *daemon.Config) {
 	allowedKeys := parseAuthorizedKeys(config.Keys)
-	daemon.SetupNetworkGroup(client, config.Network)
 	privateKey := loadPrivateKey(config.ServerKey)
 	sshConfig := setupSSHConfig(privateKey, &allowedKeys)
 	sctx := SshServerContext{

@@ -13,11 +13,8 @@ import (
 )
 
 var (
-	SignalDestroyContainer = []byte{114}
-	SignalStopContainer    = []byte{19}
-	SignalKillContainer    = []byte{07}
-	InContainerSocketName  = "daemon.sock"
-	InContainerSocketPath  = path.Join(daemon.InContainerDataDir, InContainerSocketName)
+	InContainerSocketName = "daemon.sock"
+	InContainerSocketPath = path.Join(daemon.InContainerDataDir, InContainerSocketName)
 )
 
 type ManagerContext struct {
@@ -100,6 +97,11 @@ func (ctx *ManagerContext) IsShuttingDown() bool {
 }
 
 func (ctx *ManagerContext) signalServer(c net.Conn) {
+	for {
+		buf := make([]byte, 1024)
+		daemon.Unmarshal()
+	}
+
 	buf := make([]byte, 1)
 	for {
 		_, err := c.Read(buf)

@@ -29,6 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create Docker client: %v", err)
 	}
+	daemon.SetupNetworkGroup(dockerClient, config.Network)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	waitGroup := &sync.WaitGroup{}
