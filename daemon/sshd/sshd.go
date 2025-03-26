@@ -20,24 +20,83 @@ type SshServerContext struct {
 	context      context.Context
 	wg           *sync.WaitGroup
 	shuttingDown bool
+	cancel       func()
+	serverConfig *ssh.ServerConfig
 	DockerClient *client.Client
 	AppConfig    *daemon.Config
 	EventChannel chan *daemon.ServerEvent
 }
 
-func StartSshServer(waitGroup *sync.WaitGroup, context context.Context, client *client.Client, config *daemon.Config) {
+func CreateSshServer(parent context.Context, client *client.Client, config *daemon.Config) *SshServerContext {
 	allowedKeys := parseAuthorizedKeys(config.Keys)
 	privateKey := loadPrivateKey(config.ServerKey)
 	sshConfig := setupSSHConfig(privateKey, &allowedKeys)
+	ctx, cancel := context.WithCancel(parent)
 	sctx := SshServerContext{
 		DockerClient: client,
 		AppConfig:    config,
 		EventChannel: make(chan *daemon.ServerEvent, 4),
-		context:      context,
-		wg:           waitGroup,
+		cancel:       cancel,
+		context:      ctx,
+		wg:           &sync.WaitGroup{},
 		shuttingDown: false,
+		serverConfig: sshConfig,
 	}
-	sctx.startSSHServer(sshConfig, config.Address)
+	return &sctx
+}
+
+func (sctx *SshServerContext) Serve(address string) {
+	sshConfig := sctx.serverConfig
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Fatalf("Failed to listen on address %s: %v", address, err)
+	}
+	log.Printf("Listening on %s...\n", address)
+	go sctx.signalListener(listener)
+	go sctx.eventHandler()
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if sctx.shuttingDown {
+				return
+			}
+			log.Println("Failed to accept connection:", err)
+			continue
+		}
+		connCtx := &SshConnContext{
+			ServerContext: sctx,
+			context:       sctx.context,
+			Conn:          nil,
+		}
+		go connCtx.handleConnection(conn, sshConfig)
+	}
+}
+
+func (sctx *SshServerContext) signalListener(listener net.Listener) {
+	ctx := sctx.context
+	select {
+	case <-ctx.Done():
+		log.Println("Shutting down ssh server...")
+		sctx.shuttingDown = true
+		_ = listener.Close()
+	}
+}
+
+func (sctx *SshServerContext) eventHandler() {
+	for event := range sctx.EventChannel {
+		switch event.Type() {
+		case ConnectionEstablishedEvent, manager.ManagerSocketOpenEvent:
+			sctx.wg.Add(1)
+		case ConnectionCloseEvent, manager.ManagerSocketCloseEvent:
+			sctx.wg.Add(-1)
+		}
+	}
+}
+
+func (sctx *SshServerContext) StopSshServer() {
+	sctx.cancel()
+	sctx.wg.Wait()
+	close(sctx.EventChannel)
 }
 
 func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {
@@ -96,56 +155,6 @@ func publicKeyAuth(authorizedKeys *[]ssh.PublicKey, key ssh.PublicKey) (*ssh.Per
 		}
 	}
 	return nil, fmt.Errorf("unauthorized")
-}
-
-func (sctx *SshServerContext) startSSHServer(sshConfig *ssh.ServerConfig, address string) {
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Fatalf("Failed to listen on address %s: %v", address, err)
-	}
-	log.Printf("Listening on %s...\n", address)
-	go sctx.signalListener(listener)
-	go sctx.channelListener()
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			if sctx.shuttingDown {
-				return
-			}
-			log.Println("Failed to accept connection:", err)
-			continue
-		}
-		connCtx := &SshConnContext{
-			ServerContext: sctx,
-			context:       sctx.context,
-			Conn:          nil,
-		}
-		go connCtx.handleConnection(conn, sshConfig)
-	}
-}
-
-func (sctx *SshServerContext) signalListener(listener net.Listener) {
-	select {
-	case <-sctx.context.Done():
-		{
-			log.Println("Shutting down ssh server...")
-			sctx.shuttingDown = true
-			_ = listener.Close()
-			sctx.wg.Wait()
-			close(sctx.EventChannel)
-		}
-	}
-}
-
-func (sctx *SshServerContext) channelListener() {
-	for event := range sctx.EventChannel {
-		switch event.Type() {
-		case ConnectionEstablishedEvent, manager.ManagerSocketOpenEvent:
-			sctx.wg.Add(1)
-		case ConnectionCloseEvent, manager.ManagerSocketCloseEvent:
-			sctx.wg.Add(-1)
-		}
-	}
 }
 
 func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error) {

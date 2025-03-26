@@ -80,7 +80,6 @@ func StartManagementServer(
 	if eventChannel != nil {
 		eventChannel <- NewManagerSocketOpenEvent(&ctx)
 	}
-	log.Printf("Started.")
 	go func() {
 		select {
 		case <-context.Done():
@@ -99,11 +98,14 @@ func StartManagementServer(
 
 func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
-	case "STOP":
+	case containerMethodStop:
+		log.Printf("Received STOP signal from container %v", ctx.ContainerId)
 		ctx.stopContainer()
-	case "DESTROY":
+	case containerMethodDestroy:
+		log.Printf("Received DESTROY signal from container %v", ctx.ContainerId)
 		ctx.destroyContainer()
-	case "KILL":
+	case containerMethodKill:
+		log.Printf("Received KILL signal from container %v", ctx.ContainerId)
 		ctx.killContainer()
 	}
 }

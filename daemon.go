@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 )
 
@@ -30,25 +29,21 @@ func main() {
 		log.Fatalf("Failed to create Docker client: %v", err)
 	}
 	daemon.SetupNetworkGroup(dockerClient, config.Network)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	waitGroup := &sync.WaitGroup{}
-	go sshd.StartSshServer(waitGroup, ctx, dockerClient, config)
+	ctx := context.Background()
+	sshs := sshd.CreateSshServer(ctx, dockerClient, config)
 
 	sigChan := make(chan os.Signal, 1)
-
+	go sshs.Serve(config.Address)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	signalHandler(waitGroup, cancel, sigChan)
+	signalHandler(sshs, sigChan)
 }
 
-func signalHandler(wg *sync.WaitGroup, cancel func(), sigChan chan os.Signal) {
+func signalHandler(sshd *sshd.SshServerContext, sigChan chan os.Signal) {
 	sign := <-sigChan
 	switch sign {
 	case syscall.SIGINT, syscall.SIGTERM:
 		log.Println("Shutting down...")
-		cancel()
-		wg.Wait()
-		return
+		sshd.StopSshServer()
 	default:
 		log.Println("Unknown signal ", sign.String())
 	}

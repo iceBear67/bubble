@@ -29,32 +29,31 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		}
 		connCtx.ServerContext.EventChannel <- NewConnectionLostEvent(connCtx)
 	}
+	defer exitHandle()
 	go ssh.DiscardRequests(_requests)
-	for newChannel := range channels {
-		// todo support env passthru
-		if newChannel.ChannelType() == "session" {
-			channel, reqs, err := newChannel.Accept()
-			if err != nil {
-				if connCtx.ServerContext.shuttingDown {
-					return
-				}
+	newChannel := <-channels
+	// todo support env passthru
+	if newChannel.ChannelType() == "session" {
+		channel, reqs, err := newChannel.Accept()
+		if err != nil {
+			if !connCtx.ServerContext.shuttingDown {
 				log.Println("Failed to accept channel:", err)
-				continue
 			}
-			connCtx.Conn = &channel
-			connCtx.User = sshConn.User()
-			connCtx.EventChannel = make(chan *daemon.ServerEvent, 4)
-			containerId, containerTemplate, err := connCtx.prepareSession()
-			if err != nil || containerId == nil {
-				connCtx.logToBoth(fmt.Sprintf("Failed to handle session: %v", err))
-				exitHandle()
-				return
-			}
-
-			go connCtx.handleRequests(reqs)
-			connCtx.eventLoop(exitHandle, containerTemplate, *containerId)
 			return
 		}
+		connCtx.Conn = &channel
+		connCtx.User = sshConn.User()
+		connCtx.EventChannel = make(chan *daemon.ServerEvent, 4)
+		containerId, containerTemplate, err := connCtx.prepareSession()
+		if err != nil || containerId == nil {
+			connCtx.logToBoth(fmt.Sprintf("Failed to handle session: %v", err))
+			exitHandle()
+			return
+		}
+
+		go connCtx.handleRequests(reqs)
+		connCtx.eventLoop(containerTemplate, *containerId)
+		return
 	}
 }
 
@@ -145,8 +144,7 @@ type PtySession struct {
 	lastExecId      *string
 }
 
-func (connCtx *SshConnContext) eventLoop(exitHandle func(), containerTemplate *daemon.ContainerConfig, containerId string) {
-	defer exitHandle()
+func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConfig, containerId string) {
 	pty := &PtySession{
 		connCtx:         connCtx,
 		containerId:     containerId,
