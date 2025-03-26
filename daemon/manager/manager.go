@@ -87,7 +87,7 @@ func StartManagementServer(
 				return
 			}
 			ctx.shuttingDown = true
-			if err := server.Shutdown(ctx.Context); err != nil {
+			if err := server.Close(); err != nil {
 				log.Printf("Cannot shutdown management server gracefully: %v", err)
 			}
 			_ = os.Remove(ctx.Address)
