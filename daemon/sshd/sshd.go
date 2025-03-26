@@ -140,10 +140,8 @@ func (sctx *SshServerContext) channelListener() {
 	for event := range sctx.EventChannel {
 		switch event.Type() {
 		case ConnectionEstablishedEvent, manager.ManagerSocketOpenEvent:
-			println(1, event.Type())
 			sctx.wg.Add(1)
 		case ConnectionCloseEvent, manager.ManagerSocketCloseEvent:
-			println(2, event.Type())
 			sctx.wg.Add(-1)
 		}
 	}

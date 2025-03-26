@@ -35,6 +35,7 @@ func main() {
 	go sshd.StartSshServer(waitGroup, ctx, dockerClient, config)
 
 	sigChan := make(chan os.Signal, 1)
+
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	signalHandler(waitGroup, cancel, sigChan)
 }
