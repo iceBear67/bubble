@@ -28,9 +28,8 @@ type SshServerContext struct {
 }
 
 func CreateSshServer(parent context.Context, client *client.Client, config *daemon.Config) *SshServerContext {
-	allowedKeys := parseAuthorizedKeys(config.Keys)
 	privateKey := loadPrivateKey(config.ServerKey)
-	sshConfig := setupSSHConfig(privateKey, &allowedKeys)
+	sshConfig := setupSSHConfig(privateKey, config)
 	ctx, cancel := context.WithCancel(parent)
 	sctx := SshServerContext{
 		DockerClient: client,
@@ -103,19 +102,6 @@ func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {
 	return filepath.Join(sctx.AppConfig.WorkspaceParent, user)
 }
 
-func parseAuthorizedKeys(keys []string) []ssh.PublicKey {
-	allowedKeys := make([]ssh.PublicKey, 0)
-	for _, key := range keys {
-		result, _, _, _, err := ssh.ParseAuthorizedKey([]byte(key))
-		if err != nil {
-			log.Printf("Failed to parse public key: %v", err)
-			continue
-		}
-		allowedKeys = append(allowedKeys, result)
-	}
-	return allowedKeys
-}
-
 func loadPrivateKey(path string) ssh.Signer {
 	privateBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -128,11 +114,45 @@ func loadPrivateKey(path string) ssh.Signer {
 	return private
 }
 
-func setupSSHConfig(private ssh.Signer, authorizedKeys *[]ssh.PublicKey) *ssh.ServerConfig {
+func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig {
+	namedKeys := make(map[string][]ssh.PublicKey)
+	for k, v := range config.Keys {
+		keys := make([]ssh.PublicKey, 0)
+		for i := range v {
+			result, _, _, _, err := ssh.ParseAuthorizedKey([]byte(v[i]))
+			if err != nil {
+				log.Printf("Failed to parse public key: %v", err)
+				continue
+			}
+			keys = append(keys, result)
+		}
+		namedKeys[k] = keys
+	}
 	var sshConfig *ssh.ServerConfig
-	if len(*authorizedKeys) != 0 {
-		sshConfig = &ssh.ServerConfig{PublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
-			return publicKeyAuth(authorizedKeys, key)
+	if len(namedKeys) != 0 {
+		sshConfig = &ssh.ServerConfig{PublicKeyCallback: func(conn ssh.ConnMetadata, incomingKey ssh.PublicKey) (*ssh.Permissions, error) {
+			if incomingKey == nil {
+				return nil, fmt.Errorf("unauthorized: key not present")
+			}
+			for name, allowedKeys := range namedKeys {
+				for i := range allowedKeys {
+					key := allowedKeys[i]
+					if key == nil {
+						println("key is null")
+					}
+					if bytes.Equal(key.Marshal(), incomingKey.Marshal()) {
+						access, exists := config.AccessControl[name]
+						if !exists {
+							return nil, fmt.Errorf("unauthorized: acl not set")
+						}
+						if access.CanAccess(conn.User()) {
+							return nil, nil
+						}
+						return nil, fmt.Errorf("unauthorized: access not granted")
+					}
+				}
+			}
+			return nil, fmt.Errorf("unauthorized: incomingKey not enrolled.")
 		}}
 	} else {
 		log.Println("NO CLIENT AUTH IS ENABLED! YOU SHALL ONLY USE THIS IN TEST ENVIRONMENT.")
@@ -143,18 +163,6 @@ func setupSSHConfig(private ssh.Signer, authorizedKeys *[]ssh.PublicKey) *ssh.Se
 	sshConfig.AddHostKey(private)
 
 	return sshConfig
-}
-
-func publicKeyAuth(authorizedKeys *[]ssh.PublicKey, key ssh.PublicKey) (*ssh.Permissions, error) {
-	if len(*authorizedKeys) == 0 {
-		return nil, nil
-	}
-	for _, allowedKey := range *authorizedKeys {
-		if bytes.Equal(allowedKey.Marshal(), key.Marshal()) {
-			return nil, nil
-		}
-	}
-	return nil, fmt.Errorf("unauthorized")
 }
 
 func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error) {

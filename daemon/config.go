@@ -12,12 +12,17 @@ import (
 type Config struct {
 	Address         string                     `yaml:"address"`
 	Network         string                     `yaml:"network-group"`
-	Keys            []string                   `yaml:"keys"`
+	Keys            map[string][]string        `yaml:"keys"`
+	AccessControl   map[string]AccessConfig    `yaml:"access-control"`
 	ServerKey       string                     `yaml:"server-key-file"`
 	WorkspaceParent string                     `yaml:"workspace-parent"`
 	GlobalShareDir  string                     `yaml:"global-share-dir"`
 	Runtime         string                     `yaml:"runtime"`
 	Templates       map[string]ContainerConfig `yaml:"templates"`
+}
+
+type AccessConfig struct {
+	Patterns []string `yaml:"patterns"`
 }
 
 type ContainerConfig struct {
@@ -40,6 +45,7 @@ func LoadConfig(path *string) (*Config, error) {
 		GlobalShareDir:  "",
 		Runtime:         "",
 		Templates:       make(map[string]ContainerConfig),
+		AccessControl:   make(map[string]AccessConfig),
 	}
 	file, err := os.Open(*path)
 	if err != nil {
@@ -106,4 +112,13 @@ func (c *Config) GetTemplateByUser(user string) (*ContainerConfig, error) {
 		}
 	}
 	return nil, fmt.Errorf("cannot find template for user %v", user)
+}
+
+func (c *AccessConfig) CanAccess(name string) bool {
+	for _, element := range c.Patterns {
+		if matched, err := regexp.Match(element, []byte(name)); err == nil && matched {
+			return true
+		}
+	}
+	return false
 }

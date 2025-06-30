@@ -57,7 +57,16 @@ global-share-dir: "global"
 
 # List of allowed SSH keys (~/.sshd/authorized_keys).
 # If empty, anyone can connect.
-keys: []
+# Since 0.2, keys should be named.
+keys: 
+  icybear: 
+    - "...."
+
+# Since 0.2, accesses to containers should be explicitly declared to named keys
+access-control:
+  icybear: 
+    patterns:
+      - "^icybear$"
 
 # Container configurations based on SSH username.
 templates:
