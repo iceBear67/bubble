@@ -2,7 +2,6 @@ package sshd
 
 import (
 	"bubble/daemon"
-	"bubble/daemon/manager"
 	"bytes"
 	"context"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 )
 
@@ -84,9 +84,11 @@ func (sctx *SshServerContext) signalListener(listener net.Listener) {
 func (sctx *SshServerContext) eventHandler() {
 	for event := range sctx.EventChannel {
 		switch event.Type() {
-		case ConnectionEstablishedEvent, manager.ManagerSocketOpenEvent:
+		case ConnectionEstablishedEvent:
+			fmt.Println("Connection established! " + strconv.Itoa(event.Type()))
 			sctx.wg.Add(1)
-		case ConnectionCloseEvent, manager.ManagerSocketCloseEvent:
+		case ConnectionCloseEvent:
+			fmt.Println("Connection closed! " + strconv.Itoa(event.Type()))
 			sctx.wg.Add(-1)
 		}
 	}
@@ -165,9 +167,10 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 	return sshConfig
 }
 
-func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error) {
+func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error, bool) {
 	dockerClient := sctx.DockerClient
 	exists, status, containerID := daemon.ContainerExists(dockerClient, containerName)
+	isNew := false
 	if !exists {
 		_containerID, err := daemon.CreateContainerFromTemplate(
 			dockerClient,
@@ -181,9 +184,10 @@ func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDi
 		if err != nil {
 			log.Println("Failed to create container: ", err)
 			_ = sctx.DockerClient.ContainerRemove(sctx.context, containerName, container.RemoveOptions{})
-			return nil, fmt.Errorf("failed to create container: %v", err)
+			return nil, fmt.Errorf("failed to create container: %v", err), false
 		}
 		containerID = _containerID
+		isNew = true
 	}
 	if status != "" {
 		switch status {
@@ -196,12 +200,12 @@ func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDi
 			_ = sctx.DockerClient.NetworkDisconnect(sctx.context, sctx.AppConfig.Network, containerID, true)
 			err := sctx.DockerClient.ContainerStart(sctx.context, containerID, container.StartOptions{})
 			if err != nil {
-				return nil, fmt.Errorf("failed to start container: %v", err)
+				return nil, fmt.Errorf("failed to start container: %v", err), false
 			}
 			break
 		default:
-			return nil, fmt.Errorf("unexpected container status: %v", status)
+			return nil, fmt.Errorf("unexpected container status: %v", status), false
 		}
 	}
-	return &containerID, nil
+	return &containerID, nil, isNew
 }

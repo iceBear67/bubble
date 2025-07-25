@@ -9,6 +9,7 @@ import (
 	"golang.org/x/crypto/ssh"
 	"log"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -74,11 +75,11 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		return
 	}
 	connCtx.logToBoth(fmt.Sprintf("Preparing container for %v...", connCtx.User))
-	containerId, erro := connCtx.ServerContext.PrepareContainer(
+	containerId, erro, isNew := connCtx.ServerContext.PrepareContainer(
 		containerName,
 		connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
 		containerTemplate)
-	if containerTemplate.EnableManager {
+	if isNew && containerTemplate.EnableManager {
 		connCtx.EventChannel <- manager.NewEnableManagerEvent()
 	}
 	if erro != nil {
@@ -170,11 +171,12 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 				log.Printf("(%v) Error: management socket depends on the workspace volume, which isn't mounted.", connCtx.User)
 				break
 			}
-			connCtx.createManagerSocket(containerId,
-				filepath.Join(
-					connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
-					manager.InContainerSocketName),
-			)
+			// remove the previous socket.
+			socketPath := filepath.Join(
+				connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
+				manager.InContainerSocketName)
+			_ = os.Remove(socketPath)
+			connCtx.createManagerSocket(containerId, socketPath)
 		case manager.ManagerSocketCloseEvent, manager.ManagerSocketOpenEvent:
 			// forward to upstream.
 			connCtx.ServerContext.EventChannel <- evt
