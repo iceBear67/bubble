@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"bubble/daemon"
+	"bubble/daemon/forwarder"
 	"bubble/daemon/manager"
 	"encoding/binary"
 	"fmt"
@@ -176,9 +177,19 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 				connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
 				manager.InContainerSocketName)
 			_ = os.Remove(socketPath)
-			connCtx.createManagerSocket(containerId, socketPath)
+			mctx := connCtx.createManagerSocket(containerId, socketPath)
+			forwarderCfg := containerTemplate.PortForwarding
+			if forwarderCfg != nil {
+				mctx.AllowPortForwarding(&forwarder.PortForwarderConfig{
+					AllowLowest:  forwarderCfg.MinPort,
+					AllowHighest: forwarderCfg.MaxPort,
+					EventChan:    connCtx.EventChannel,
+				})
+			}
 		case manager.ManagerSocketCloseEvent, manager.ManagerSocketOpenEvent:
 			// forward to upstream.
+			connCtx.ServerContext.EventChannel <- evt
+		case forwarder.PortForwardRequestEvent:
 			connCtx.ServerContext.EventChannel <- evt
 		}
 	}

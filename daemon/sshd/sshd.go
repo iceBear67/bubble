@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"bubble/daemon"
+	"bubble/daemon/forwarder"
 	"bytes"
 	"context"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 )
 
@@ -82,14 +82,22 @@ func (sctx *SshServerContext) signalListener(listener net.Listener) {
 }
 
 func (sctx *SshServerContext) eventHandler() {
+	openedPorts := make(map[int]*struct{})
 	for event := range sctx.EventChannel {
 		switch event.Type() {
 		case ConnectionEstablishedEvent:
-			fmt.Println("Connection established! " + strconv.Itoa(event.Type()))
 			sctx.wg.Add(1)
 		case ConnectionCloseEvent:
-			fmt.Println("Connection closed! " + strconv.Itoa(event.Type()))
 			sctx.wg.Add(-1)
+		case forwarder.PortForwardRequestEvent:
+			from, to, dst := forwarder.ForwardRequest(event)
+			log.Println("Received port forwarding request from ", dst, ": (host)", from, " -> (guest)", to)
+			if _, ok := openedPorts[from]; ok {
+				log.Println("Port conflict: ", from, " -> ", to)
+				continue
+			}
+			openedPorts[from] = &struct{}{}
+			go forwarder.PortForward(sctx.context, dst, from, to)
 		}
 	}
 }

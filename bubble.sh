@@ -20,7 +20,7 @@ function send_signal(){
     return
   fi
   echo "Sending signal $1 to manager..."
-  curl --unix-socket $BUBBLE_SOCK -X $1 http://localhost
+  curl --unix-socket $BUBBLE_SOCK -X $1 http://localhost/$2
 }
 
 case "$1" in
@@ -33,7 +33,18 @@ case "$1" in
   "kill")
     send_signal "KILL"
   ;;
+  "expose")
+    if test ! -z $2; then
+      echo "expose <hostPort> <toPort>"
+      return
+    elif test ! -z $3; then
+      echo "expose <hostPort> <toPort>"
+      return
+    fi
+    send_signal "PORT" "from=$2&to=$3"
   *)
-    echo "Usage: bubble <destroy|stop|kill>"
+    echo "Usage: bubble <destroy|stop|kill|expose>"
+    echo "  For port forwarding: expose <hostPort> <toPort>"
+    echo "  Port forwarding must be explicitly enabled in daemon config."
   ;;
 esac

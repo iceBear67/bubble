@@ -2,7 +2,10 @@ package manager
 
 import (
 	"bubble/daemon"
+	"bubble/daemon/forwarder"
 	"context"
+	"errors"
+	"fmt"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"log"
@@ -10,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +36,11 @@ type ManagerContext struct {
 	Address      string
 	shuttingDown bool
 	listener     *net.Listener
+	forwarder    *forwarder.PortForwarderConfig
+}
+
+func (mctx *ManagerContext) AllowPortForwarding(forwarder *forwarder.PortForwarderConfig) {
+	mctx.forwarder = forwarder
 }
 
 func StartManagementServer(
@@ -46,6 +55,7 @@ func StartManagementServer(
 		containerId,
 		address,
 		false,
+		nil,
 		nil,
 	}
 	addr := ctx.Address
@@ -107,7 +117,54 @@ func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case containerMethodKill:
 		log.Printf("Received KILL signal from container %v", ctx.ContainerId)
 		ctx.killContainer()
+	case containerMethodExposePort:
+		log.Printf("Receive PORT forwarding request from container %v", ctx.ContainerId)
+		if ctx.forwarder == nil {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		err := r.ParseForm()
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("Invalid body"))
+			return
+		}
+		ip, err := ctx.getIpOfContainer()
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("Networking is disabled"))
+			return
+		}
+		from := r.Form.Get("from")
+		fromPort, err := strconv.Atoi(from)
+		if err != nil || fromPort < ctx.forwarder.AllowLowest || fromPort > ctx.forwarder.AllowHighest {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(fmt.Sprintf("From port %v isn't integer. Min: %v, max: %v", fromPort, ctx.forwarder.AllowLowest, ctx.forwarder.AllowHighest)))
+			return
+		}
+		to := r.Form.Get("to")
+		toPort, err := strconv.Atoi(to)
+		if err != nil || (toPort < 1 || toPort > 65535) {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte("Invalid destination port"))
+			return
+		}
+		ctx.forwarder.Start(fromPort, toPort, ip)
 	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func (ctx *ManagerContext) getIpOfContainer() (string, error) {
+	info, err := ctx.DockerClient.ContainerInspect(ctx.Context, ctx.ContainerId)
+	if err != nil {
+		return "", err
+	}
+	networks := info.NetworkSettings.Networks
+	network, contains := networks["network"]
+	if !contains {
+		return "", errors.New("no network found")
+	}
+	return network.IPAddress, nil
 }
 
 func (ctx *ManagerContext) IsShuttingDown() bool {

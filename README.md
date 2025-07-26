@@ -93,6 +93,11 @@ templates:
     # Enable privileged mode. Required for Docker-in-Docker.
     # Warning: This introduces security risks.
     privilege: true
+
+    # Enable port forwarding. Containers may send a PORT request to manager server to open ports.
+    port-forwarding:
+      min-port: 0
+      max-port: 65535
 ```
 
 # Client
