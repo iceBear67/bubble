@@ -42,6 +42,7 @@ case "$1" in
       return
     fi
     send_signal "PORT" "from=$2&to=$3"
+  ;;
   *)
     echo "Usage: bubble <destroy|stop|kill|expose>"
     echo "  For port forwarding: expose <hostPort> <toPort>"
