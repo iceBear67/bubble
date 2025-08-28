@@ -110,4 +110,5 @@ Usage: client <destroy|stop>
 
 # Roadmap
  - Support SFTP.
+   - You can install `openssh-sftp-server` (debian) on your container then use `-s /usr/lib/openssh/sftp-server` on your sftp commandline.
  - Port mapping

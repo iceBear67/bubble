@@ -70,6 +70,7 @@ func signalHandler(sshd *sshd.SshServerContext, sigChan chan os.Signal) {
 			// The program isn't terminated.
 			_ = sshd
 			fmt.Println("Program isn't stopped!")
+			os.Exit(-1)
 		}()
 		sshd.StopSshServer()
 		os.Exit(0)

@@ -5,10 +5,11 @@ import (
 	"bubble/daemon/manager"
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types/container"
-	"golang.org/x/crypto/ssh"
 	"io"
 	"log"
+
+	"github.com/docker/docker/api/types/container"
+	"golang.org/x/crypto/ssh"
 )
 
 type SshConnContext struct {
@@ -17,6 +18,7 @@ type SshConnContext struct {
 	User          string
 	Conn          *ssh.Channel
 	EventChannel  chan *daemon.ServerEvent
+	Interactive   bool
 }
 
 func (connCtx *SshConnContext) createManagerSocket(containerId string, addr string) *manager.ManagerContext {
@@ -40,7 +42,7 @@ func (connCtx *SshConnContext) RedirectToContainer(
 	env = append(env, "BUBBLE_SOCK="+manager.InContainerSocketPath)
 	//todo more env
 	execConfig := container.ExecOptions{
-		Tty:          true,
+		Tty:          connCtx.Interactive,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -81,5 +83,7 @@ func (connCtx *SshConnContext) logToBoth(msg string) {
 }
 
 func (connCtx *SshConnContext) PrintTextLn(text string) {
-	_, _ = (*connCtx.Conn).Write([]byte(text + "\r\n"))
+	if connCtx.Interactive {
+		_, _ = (*connCtx.Conn).Write([]byte(text + "\r\n"))
+	}
 }

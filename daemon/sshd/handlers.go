@@ -6,13 +6,14 @@ import (
 	"bubble/daemon/manager"
 	"encoding/binary"
 	"fmt"
-	"github.com/docker/docker/api/types/container"
-	"golang.org/x/crypto/ssh"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/docker/docker/api/types/container"
+	"golang.org/x/crypto/ssh"
 )
 
 func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.ServerConfig) {
@@ -98,6 +99,7 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 				_ = req.Reply(true, nil)
 			}
 		case "pty-req":
+			connCtx.Interactive = true
 			if !hasPty {
 				hasPty = true // then create for it!
 				connCtx.EventChannel <- NewExecEvent(false, nil)
@@ -205,7 +207,7 @@ func (ptys *PtySession) onPtyEvent(evt *daemon.ServerEvent, containerTemplate *d
 		} else {
 			log.Printf("(%v) Pty exec switch detected.", connCtx.User)
 		}
-	case ClientExecEvent:
+	case ClientExecEvent: // pty-req also triggers this
 		silent, exec := ExecEvent(evt)
 		if !silent {
 			connCtx.PrintTextLn("Redirecting to the container...")
