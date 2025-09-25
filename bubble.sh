@@ -2,15 +2,12 @@
 # THIS SCRIPT IS A CLIENT OF THE MANAGEMENT SERVER
 # WHICH IS USED FOR MANAGING THE CURRENT CONTAINER INSIDE ITSELF.
 
-if test -z "$BUBBLE_SOCK"; then
-  echo "BUBBLE_SOCK is not present! Are you in a managed container?"
-  echo "Falling back to /mnt/data/daemon.sock as default."
-  BUBBLE_SOCK="/mnt/data/daemon.sock"
-fi
+GATEWAY=${GATEWAY:-"$(ip -j route | jq -r '.[] | select(.gateway != null) | .gateway')"}
+PORT=${PORT:-7684}
 
-if test ! -x $BUBBLE_SOCK; then
-  echo "You don't have access to $BUBBLE_SOCK."
-  echo "tip: Try again with sudo prefix."
+if test -z "$GATEWAY"; then
+  echo "Did not find a valid gateway. Please explicitly set GATEWAY in environment(should be an IP)."
+  echo "(tips: also make sure iproute2 and jq installed.)"
   exit 1
 fi
 
@@ -20,7 +17,7 @@ function send_signal(){
     return
   fi
   echo "Sending signal $1 to manager..."
-  curl --unix-socket $BUBBLE_SOCK -X $1 http://localhost/$2
+  curl -X $1 "http://$GATEWAY:$PORT/$2"
 }
 
 case "$1" in
