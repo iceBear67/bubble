@@ -1,29 +1,28 @@
 package manager
 
-import "bubble/daemon"
+import (
+	"bubble/daemon"
+)
 
 const (
-	ManagerSocketOpenEvent      = 233
-	ManagerSocketCloseEvent     = 234
-	ContainerManagerEnableEvent = 0721
+	ManagerContainerRegisteredEvent = "ManagerContainerRegistered"
 )
 
-var (
-	enableManagerEvent = daemon.CreateEventRaw(ContainerManagerEnableEvent, 0, nil)
-)
-
-func NewEnableManagerEvent() *daemon.ServerEvent {
-	return enableManagerEvent
+type ContainerJoinedEvent struct {
+	containerId string
+	bridgeIp    string
 }
 
-func NewManagerSocketOpenEvent(ctx *ManagerContext) *daemon.ServerEvent {
-	return daemon.CreateEventRaw(ManagerSocketOpenEvent, 0, ctx)
+func NewContainerRegisterEvent(containerId string, bridgeIp string) *daemon.ServerEvent {
+	return daemon.CreateEventRaw(ManagerContainerRegisteredEvent, 0, ContainerJoinedEvent{
+		containerId: containerId,
+		bridgeIp:    bridgeIp,
+	})
 }
 
-func NewManagerSocketCloseEvent(ctx *ManagerContext) *daemon.ServerEvent {
-	return daemon.CreateEventRaw(ManagerSocketCloseEvent, 0, ctx)
-}
-
-func ManagerSocketEvent(evt *daemon.ServerEvent) *ManagerContext {
-	return evt.DataRaw().(*ManagerContext)
+func ContainerRegisterEvent(event *daemon.ServerEvent) ContainerJoinedEvent {
+	if event.Type() != ManagerContainerRegisteredEvent {
+		panic(event.Type() + " is not a ContainerJoinedEvent")
+	}
+	return event.DataRaw().(ContainerJoinedEvent)
 }

@@ -1,37 +1,23 @@
 package sshd
 
 import (
-	"bubble/daemon"
-	"bubble/daemon/manager"
 	"context"
 	"fmt"
 	"io"
 	"log"
 
+	"github.com/asaskevich/EventBus"
 	"github.com/docker/docker/api/types/container"
 	"golang.org/x/crypto/ssh"
 )
 
 type SshConnContext struct {
 	ServerContext *SshServerContext
+	EventBus      EventBus.Bus
 	context       context.Context
 	User          string
 	Conn          *ssh.Channel
-	EventChannel  chan *daemon.ServerEvent
 	Interactive   bool
-}
-
-func (connCtx *SshConnContext) createManagerSocket(containerId string, addr string) *manager.ManagerContext {
-	ctx, err := manager.StartManagementServer(
-		connCtx.ServerContext.DockerClient,
-		connCtx.context,
-		connCtx.EventChannel,
-		containerId,
-		addr)
-	if err != nil {
-		log.Printf("Failed to start manager socket: %v", err)
-	}
-	return ctx
 }
 
 func (connCtx *SshConnContext) RedirectToContainer(
@@ -39,7 +25,6 @@ func (connCtx *SshConnContext) RedirectToContainer(
 	cmd []string,
 ) (closeHandle func(), execId *string, err error) {
 	env := make([]string, 0)
-	env = append(env, "BUBBLE_SOCK="+manager.InContainerSocketPath)
 	//todo more env
 	execConfig := container.ExecOptions{
 		Tty:          connCtx.Interactive,
@@ -70,7 +55,7 @@ func (connCtx *SshConnContext) RedirectToContainer(
 	}()
 	go func() {
 		_, _ = io.Copy(*conn, hijackedResp.Reader)
-		connCtx.EventChannel <- NewBrokenPipeEvent(id)
+		connCtx.EventBus.Publish(ClientPipeBrokenEvent, NewBrokenPipeEvent(id))
 	}()
 	return func() {
 		hijackedResp.Close()

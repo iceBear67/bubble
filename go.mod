@@ -5,6 +5,7 @@ go 1.24.1
 require (
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/ThomasObenaus/go-conf v0.1.3 // indirect
+	github.com/asaskevich/EventBus v0.0.0-20200907212545-49d423059eef // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v28.0.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect

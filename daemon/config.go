@@ -2,11 +2,12 @@ package daemon
 
 import (
 	"fmt"
-	"github.com/goccy/go-yaml"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/goccy/go-yaml"
 )
 
 type Config struct {
@@ -18,7 +19,13 @@ type Config struct {
 	WorkspaceParent string                     `yaml:"workspace-parent"`
 	GlobalShareDir  string                     `yaml:"global-share-dir"`
 	Runtime         string                     `yaml:"runtime"`
+	Manager         ManagerServer              `yaml:"manager"`
 	Templates       map[string]ContainerConfig `yaml:"templates"`
+}
+
+type ManagerServer struct {
+	Address    string `yaml:"address"`
+	SubnetCIDR string `yaml:"subnet-cidr"`
 }
 
 type AccessConfig struct {
@@ -50,8 +57,12 @@ func LoadConfig(path *string) (*Config, error) {
 		WorkspaceParent: "",
 		GlobalShareDir:  "",
 		Runtime:         "",
-		Templates:       make(map[string]ContainerConfig),
-		AccessControl:   make(map[string]AccessConfig),
+		Manager: ManagerServer{
+			Address:    "0.0.0.0:7684",
+			SubnetCIDR: "127.17.0.0/16",
+		},
+		Templates:     make(map[string]ContainerConfig),
+		AccessControl: make(map[string]AccessConfig),
 	}
 	file, err := os.Open(*path)
 	if err != nil {

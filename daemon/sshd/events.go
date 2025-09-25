@@ -6,13 +6,13 @@ import (
 )
 
 const (
-	ClientResizeEvent           = 114514
-	ClientExecEvent             = 1551
-	ClientPipeBrokenEvent       = 1919810
-	ClientSubsystemRequestEvent = 943
+	ClientResizeEvent           = "ClientResizeEvent"
+	ClientExecEvent             = "ClientExecEvent"
+	ClientPipeBrokenEvent       = "ClientPipeBrokenEvent"
+	ClientSubsystemRequestEvent = "ClientSubsystemRequestEvent"
 
-	ConnectionCloseEvent       = 486
-	ConnectionEstablishedEvent = 123
+	ConnectionCloseEvent       = "ConnectionCloseEvent"
+	ConnectionEstablishedEvent = "ConnectionEstablishedEvent"
 )
 
 func NewConnectionEstablishedEvent(conn *SshConnContext) *daemon.ServerEvent {

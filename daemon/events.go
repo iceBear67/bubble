@@ -1,12 +1,12 @@
 package daemon
 
 type ServerEvent struct {
-	typeIndex int
+	typeIndex string
 	flag      int
 	data      interface{}
 }
 
-func CreateEventRaw(type_ int, flag int, data interface{}) *ServerEvent {
+func CreateEventRaw(type_ string, flag int, data interface{}) *ServerEvent {
 	return &ServerEvent{
 		typeIndex: type_,
 		flag:      flag,
@@ -22,6 +22,6 @@ func (c *ServerEvent) DataRaw() any {
 	return c.data
 }
 
-func (c *ServerEvent) Type() int {
+func (c *ServerEvent) Type() string {
 	return c.typeIndex
 }

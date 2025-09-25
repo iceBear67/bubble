@@ -6,14 +6,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
-	"golang.org/x/crypto/ssh"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/asaskevich/EventBus"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
+	"golang.org/x/crypto/ssh"
 )
 
 type SshServerContext struct {
@@ -24,7 +26,7 @@ type SshServerContext struct {
 	serverConfig *ssh.ServerConfig
 	DockerClient *client.Client
 	AppConfig    *daemon.Config
-	EventChannel chan *daemon.ServerEvent
+	EventBus     EventBus.Bus
 }
 
 func CreateSshServer(parent context.Context, client *client.Client, config *daemon.Config) *SshServerContext {
@@ -34,7 +36,7 @@ func CreateSshServer(parent context.Context, client *client.Client, config *daem
 	sctx := SshServerContext{
 		DockerClient: client,
 		AppConfig:    config,
-		EventChannel: make(chan *daemon.ServerEvent, 4),
+		EventBus:     EventBus.New(),
 		cancel:       cancel,
 		context:      ctx,
 		wg:           &sync.WaitGroup{},
@@ -66,6 +68,7 @@ func (sctx *SshServerContext) Serve(address string) {
 			ServerContext: sctx,
 			context:       sctx.context,
 			Conn:          nil,
+			EventBus:      EventBus.New(),
 		}
 		go connCtx.handleConnection(conn, sshConfig)
 	}
@@ -83,29 +86,36 @@ func (sctx *SshServerContext) signalListener(listener net.Listener) {
 
 func (sctx *SshServerContext) eventHandler() {
 	openedPorts := make(map[int]*struct{})
-	for event := range sctx.EventChannel {
-		switch event.Type() {
-		case ConnectionEstablishedEvent:
-			sctx.wg.Add(1)
-		case ConnectionCloseEvent:
-			sctx.wg.Add(-1)
-		case forwarder.PortForwardRequestEvent:
-			from, to, dst := forwarder.ForwardRequest(event)
-			log.Println("Received port forwarding request from ", dst, ": (host)", from, " -> (guest)", to)
-			if _, ok := openedPorts[from]; ok {
-				log.Println("Port conflict: ", from, " -> ", to)
-				continue
-			}
-			openedPorts[from] = &struct{}{}
-			go forwarder.PortForward(sctx.context, dst, from, to)
+	err := sctx.EventBus.Subscribe(ConnectionEstablishedEvent, func() {
+		sctx.wg.Add(1)
+	})
+	if err != nil {
+		panic(err)
+	}
+	err = sctx.EventBus.Subscribe(ConnectionCloseEvent, func() {
+		sctx.wg.Add(-1)
+	})
+	if err != nil {
+		panic(err)
+	}
+	err = sctx.EventBus.SubscribeAsync(forwarder.PortForwardRequestEvent, func(from int, to int, dst string) {
+		log.Println("Received port forwarding request from ", dst, ": (host)", from, " -> (guest)", to)
+		if _, ok := openedPorts[from]; ok {
+			log.Println("Port conflict: ", from, " -> ", to)
+			return
 		}
+		openedPorts[from] = &struct{}{}
+		go forwarder.PortForward(sctx.context, dst, from, to)
+	}, false)
+	if err != nil {
+		panic(err)
 	}
 }
 
 func (sctx *SshServerContext) StopSshServer() {
 	sctx.cancel()
 	sctx.wg.Wait()
-	close(sctx.EventChannel)
+	sctx.EventBus.WaitAsync()
 }
 
 func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {

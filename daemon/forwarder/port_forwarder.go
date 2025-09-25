@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	PortForwardRequestEvent = 191283
+	PortForwardRequestEvent = "PortForwardRequestEvent"
 )
 
 func NewForwardRequest(fromPort int, toPort int, dst string) *daemon.ServerEvent {
