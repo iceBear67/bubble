@@ -2,6 +2,7 @@ package sshd
 
 import (
 	"bubble/daemon"
+	"bubble/daemon/manager"
 	"encoding/binary"
 	"fmt"
 	"log"
@@ -49,8 +50,8 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 			return
 		}
 
-		go connCtx.handleRequests(reqs)
 		connCtx.eventLoop(containerTemplate, *containerId)
+		connCtx.handleRequests(reqs)
 		return
 	}
 }
@@ -72,12 +73,17 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		return
 	}
 	connCtx.logToBoth(fmt.Sprintf("Preparing container for %v...", connCtx.User))
-	containerId, erro, isNew := connCtx.ServerContext.PrepareContainer(
+	containerId, erro, _ := connCtx.ServerContext.PrepareContainer(
 		containerName,
 		connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
 		containerTemplate)
-	if isNew && containerTemplate.EnableManager {
-		//todo join
+	if containerTemplate.EnableManager {
+		ip, err := daemon.GetIpOfContainer(connCtx.ServerContext.DockerClient, *containerId)
+		if err == nil {
+			connCtx.ServerContext.EventBus.Publish(manager.ManagerContainerRegisteredEvent, manager.NewContainerRegisterEvent(*containerId, ip))
+		} else {
+			log.Println("Failed to get ip of container", containerId, err)
+		}
 	}
 	if erro != nil {
 		erro = fmt.Errorf("error while preparing container: %v", erro)
@@ -97,7 +103,7 @@ func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 			connCtx.Interactive = true
 			if !hasPty {
 				hasPty = true // then create for it!
-				connCtx.EventBus.Publish(ClientExecEvent, NewExecEvent(false, nil))
+				connCtx.EventBus.PublishSync(ClientExecEvent, NewExecEvent(false, nil))
 			}
 			termLen := req.Payload[3]
 			connCtx.EventBus.Publish(ClientResizeEvent, NewResizeEvent(req.Payload[termLen+4:]))
@@ -150,7 +156,7 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 		lastCloseHandle: nil,
 		lastExecId:      nil,
 	}
-	ptyEventHandler := func(event *daemon.ServerEvent) {
+	ptyEventHandler := func(_ string, event *daemon.ServerEvent) {
 		err := pty.onPtyEvent(event, containerTemplate)
 		if err != nil {
 			if !connCtx.ServerContext.shuttingDown {
@@ -159,14 +165,15 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 			return
 		}
 	}
-	bus := connCtx.ServerContext.EventBus
+	bus := connCtx.EventBus
 	bus.Subscribe(ClientExecEvent, ptyEventHandler)
 	bus.Subscribe(ClientResizeEvent, ptyEventHandler)
 	bus.Subscribe(ClientPipeBrokenEvent, ptyEventHandler)
-	bus.Subscribe(ClientSubsystemRequestEvent, func(evt *daemon.ServerEvent) {
+	bus.Subscribe(ClientSubsystemRequestEvent, func(_, evt *daemon.ServerEvent) {
 		service := SubsystemRequest(evt)
 		log.Printf("(%v) Received a subsystem request for %v, but unsupported yet :(", connCtx.User, service)
 	})
+
 }
 
 func (ptys *PtySession) onPtyEvent(evt *daemon.ServerEvent, containerTemplate *daemon.ContainerConfig) error {

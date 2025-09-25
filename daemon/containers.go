@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"strings"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
-	"log"
-	"strings"
 )
 
 const ContainerStatusRunning = "running"
@@ -15,7 +17,6 @@ const ContainerStatusCreated = "created"
 const ContainerStatusPaused = "paused"
 const ContainerStatusExited = "exited"
 const ContainerStatusUp = "up"
-const InContainerDataDir = "/mnt/data"
 
 func SetupDockerClient() (*client.Client, error) {
 	var err error
@@ -66,6 +67,19 @@ func ContainerExists(dockerClient *client.Client, name string) (exists bool, sta
 		}
 	}
 	return false, "", ""
+}
+
+func GetIpOfContainer(dockerClient *client.Client, containerId string) (string, error) {
+	info, err := dockerClient.ContainerInspect(context.Background(), containerId)
+	if err != nil {
+		return "", err
+	}
+	networks := info.NetworkSettings.Networks
+	network_, contains := networks["network"]
+	if !contains {
+		return "", errors.New("no network found")
+	}
+	return network_.IPAddress, nil
 }
 
 func CreateContainerFromTemplate(

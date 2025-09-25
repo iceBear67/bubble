@@ -6,14 +6,14 @@ import (
 	"io"
 	"log"
 
-	"github.com/asaskevich/EventBus"
 	"github.com/docker/docker/api/types/container"
+	"github.com/werbenhu/eventbus"
 	"golang.org/x/crypto/ssh"
 )
 
 type SshConnContext struct {
 	ServerContext *SshServerContext
-	EventBus      EventBus.Bus
+	EventBus      *eventbus.EventBus
 	context       context.Context
 	User          string
 	Conn          *ssh.Channel

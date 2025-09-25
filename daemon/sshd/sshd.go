@@ -3,6 +3,7 @@ package sshd
 import (
 	"bubble/daemon"
 	"bubble/daemon/forwarder"
+	"bubble/daemon/manager"
 	"bytes"
 	"context"
 	"fmt"
@@ -12,9 +13,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/asaskevich/EventBus"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/werbenhu/eventbus"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -26,7 +27,7 @@ type SshServerContext struct {
 	serverConfig *ssh.ServerConfig
 	DockerClient *client.Client
 	AppConfig    *daemon.Config
-	EventBus     EventBus.Bus
+	EventBus     *eventbus.EventBus
 }
 
 func CreateSshServer(parent context.Context, client *client.Client, config *daemon.Config) *SshServerContext {
@@ -36,7 +37,7 @@ func CreateSshServer(parent context.Context, client *client.Client, config *daem
 	sctx := SshServerContext{
 		DockerClient: client,
 		AppConfig:    config,
-		EventBus:     EventBus.New(),
+		EventBus:     eventbus.New(),
 		cancel:       cancel,
 		context:      ctx,
 		wg:           &sync.WaitGroup{},
@@ -55,6 +56,14 @@ func (sctx *SshServerContext) Serve(address string) {
 	log.Printf("Listening on %s...\n", address)
 	go sctx.signalListener(listener)
 	go sctx.eventHandler()
+	_, err = manager.StartManagementServer(
+		sctx.DockerClient,
+		sctx.AppConfig.Manager,
+		sctx.EventBus,
+		sctx.context)
+	if err != nil {
+		log.Fatalf("Failed to start manager server: %v", err)
+	}
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -68,7 +77,7 @@ func (sctx *SshServerContext) Serve(address string) {
 			ServerContext: sctx,
 			context:       sctx.context,
 			Conn:          nil,
-			EventBus:      EventBus.New(),
+			EventBus:      eventbus.New(),
 		}
 		go connCtx.handleConnection(conn, sshConfig)
 	}
@@ -86,19 +95,20 @@ func (sctx *SshServerContext) signalListener(listener net.Listener) {
 
 func (sctx *SshServerContext) eventHandler() {
 	openedPorts := make(map[int]*struct{})
-	err := sctx.EventBus.Subscribe(ConnectionEstablishedEvent, func() {
+	err := sctx.EventBus.Subscribe(ConnectionEstablishedEvent, func(_ string, _ *daemon.ServerEvent) {
 		sctx.wg.Add(1)
 	})
 	if err != nil {
 		panic(err)
 	}
-	err = sctx.EventBus.Subscribe(ConnectionCloseEvent, func() {
+	err = sctx.EventBus.Subscribe(ConnectionCloseEvent, func(_ string, _ *daemon.ServerEvent) {
 		sctx.wg.Add(-1)
 	})
 	if err != nil {
 		panic(err)
 	}
-	err = sctx.EventBus.SubscribeAsync(forwarder.PortForwardRequestEvent, func(from int, to int, dst string) {
+	err = sctx.EventBus.Subscribe(forwarder.PortForwardRequestEvent, func(_ string, ev *daemon.ServerEvent) {
+		from, to, dst := forwarder.ForwardRequest(ev)
 		log.Println("Received port forwarding request from ", dst, ": (host)", from, " -> (guest)", to)
 		if _, ok := openedPorts[from]; ok {
 			log.Println("Port conflict: ", from, " -> ", to)
@@ -106,7 +116,7 @@ func (sctx *SshServerContext) eventHandler() {
 		}
 		openedPorts[from] = &struct{}{}
 		go forwarder.PortForward(sctx.context, dst, from, to)
-	}, false)
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -115,7 +125,6 @@ func (sctx *SshServerContext) eventHandler() {
 func (sctx *SshServerContext) StopSshServer() {
 	sctx.cancel()
 	sctx.wg.Wait()
-	sctx.EventBus.WaitAsync()
 }
 
 func (sctx *SshServerContext) GetHostWorkspaceDir(user string) string {

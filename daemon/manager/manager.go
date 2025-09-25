@@ -4,16 +4,16 @@ import (
 	"bubble/daemon"
 	"bubble/daemon/forwarder"
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
-	"github.com/asaskevich/EventBus"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/werbenhu/eventbus"
 )
 
 const (
@@ -39,7 +39,7 @@ func (mctx *ManagerContext) AllowPortForwarding(forwarder *forwarder.PortForward
 func StartManagementServer(
 	docker *client.Client,
 	config daemon.ManagerServer,
-	bus EventBus.Bus,
+	bus *eventbus.EventBus,
 	context context.Context) (*ManagerContext, error) {
 	ctx := ManagerContext{
 		docker,
@@ -50,21 +50,37 @@ func StartManagementServer(
 		nil,
 	}
 	log.Printf("Starting management server")
-	bus.Subscribe(ManagerContainerRegisteredEvent, func(event ContainerJoinedEvent) {
+	bus.Subscribe(ManagerContainerRegisteredEvent, func(_ string, ev *daemon.ServerEvent) {
+		event := ContainerRegisterEvent(ev)
+		log.Println("(manager) Allowed ACCESS from container ", event.containerId, " at address ", event.bridgeIp)
 		ctx.IpToContainer[event.bridgeIp] = event.containerId
 	})
+	l, err := net.Listen("tcp", config.Address)
+	if err != nil {
+		return nil, err
+	}
 	go func() {
-		err := http.ListenAndServe(config.Address, &ctx)
+		ctx.listener = &l
+		err = http.Serve(l, &ctx)
 		if err != nil && !ctx.shuttingDown {
 			log.Println("Manager server has been abnormally shut down: ", err)
+		}
+	}()
+	go func() {
+		select {
+		case <-context.Done():
+			ctx.shuttingDown = true
+			(*ctx.listener).Close()
 		}
 	}()
 	return &ctx, nil
 }
 
 func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	containerId, ok := ctx.IpToContainer[r.RemoteAddr]
+	ip := strings.Split(r.RemoteAddr, ":")[0]
+	containerId, ok := ctx.IpToContainer[ip]
 	if !ok {
+		log.Println("Denied access to management server from ", r.RemoteAddr)
 		w.WriteHeader(403)
 		w.Write([]byte(""))
 		return
@@ -108,19 +124,6 @@ func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		ctx.forwarder.Start(fromPort, toPort, r.RemoteAddr)
 	}
 	w.WriteHeader(http.StatusOK)
-}
-
-func (ctx *ManagerContext) getIpOfContainer(containerId string) (string, error) {
-	info, err := ctx.DockerClient.ContainerInspect(ctx.Context, containerId)
-	if err != nil {
-		return "", err
-	}
-	networks := info.NetworkSettings.Networks
-	network, contains := networks["network"]
-	if !contains {
-		return "", errors.New("no network found")
-	}
-	return network.IPAddress, nil
 }
 
 func (ctx *ManagerContext) IsShuttingDown() bool {
