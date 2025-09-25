@@ -12,12 +12,12 @@ if test -z "$GATEWAY"; then
 fi
 
 function send_signal(){
-  if test -z $1; then
+  if test -z "$1"; then
     echo "Signal cannot be empty."
     return
   fi
   echo "Sending signal $1 to manager..."
-  curl -X $1 "http://$GATEWAY:$PORT/$2"
+  curl -X "$1" "http://$GATEWAY:$PORT/$2"
 }
 
 case "$1" in
@@ -31,10 +31,10 @@ case "$1" in
     send_signal "KILL"
   ;;
   "expose")
-    if test ! -z $2; then
+    if test ! -z "$2"; then
       echo "expose <hostPort> <toPort>"
       return
-    elif test ! -z $3; then
+    elif test ! -z "$3"; then
       echo "expose <hostPort> <toPort>"
       return
     fi
