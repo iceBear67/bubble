@@ -79,6 +79,10 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		containerName,
 		connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
 		containerTemplate)
+	if erro != nil || containerId == nil {
+		erro = fmt.Errorf("error while preparing container: %v", erro)
+		return containerId, containerTemplate, erro
+	}
 	if containerTemplate.EnableManager {
 		ip, err := daemon.GetIpOfContainer(connCtx.ServerContext.DockerClient, *containerId)
 		if err == nil {
@@ -86,9 +90,6 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		} else {
 			log.Println("Failed to get ip of container", containerId, err)
 		}
-	}
-	if erro != nil {
-		erro = fmt.Errorf("error while preparing container: %v", erro)
 	}
 	return containerId, containerTemplate, erro
 }
