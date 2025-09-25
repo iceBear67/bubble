@@ -29,7 +29,6 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		}
 		connCtx.ServerContext.EventBus.Publish(ConnectionCloseEvent, NewConnectionLostEvent(connCtx))
 	}
-	defer exitHandle()
 	go ssh.DiscardRequests(_requests)
 	newChannel := <-channels
 	// todo support env passthru
@@ -50,8 +49,11 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 			return
 		}
 
-		connCtx.eventLoop(containerTemplate, *containerId)
-		connCtx.handleRequests(reqs)
+		connCtx.registerEvents(containerTemplate, *containerId)
+		go connCtx.handleRequests(reqs)
+		connCtx.EventBus.Subscribe(ClientPipeBrokenEvent, func(_ string, _ *daemon.ServerEvent) {
+			exitHandle()
+		})
 		return
 	}
 }
@@ -94,6 +96,7 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 	hasPty := false
 	for req := range requests {
+		println(req.Type)
 		switch req.Type {
 		case "shell":
 			if len(req.Payload) == 0 {
@@ -138,6 +141,7 @@ func (connCtx *SshConnContext) handleSubsystemRequest(req *ssh.Request) error {
 		return fmt.Errorf("illegal packet length found from user %v, conn %v", connCtx.User, connCtx.Conn)
 	}
 	name := string(req.Payload[4 : 4+nameLen])
+	println(name)
 	connCtx.EventBus.Publish(ClientSubsystemRequestEvent, NewSubsystemRequest(name))
 	return nil
 }
@@ -149,7 +153,7 @@ type PtySession struct {
 	lastExecId      *string
 }
 
-func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConfig, containerId string) {
+func (connCtx *SshConnContext) registerEvents(containerTemplate *daemon.ContainerConfig, containerId string) {
 	pty := &PtySession{
 		connCtx:         connCtx,
 		containerId:     containerId,
@@ -159,9 +163,7 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 	ptyEventHandler := func(_ string, event *daemon.ServerEvent) {
 		err := pty.onPtyEvent(event, containerTemplate)
 		if err != nil {
-			if !connCtx.ServerContext.shuttingDown {
-				log.Printf("(%v) Connection closed, message: %v", connCtx.User, err)
-			}
+			log.Printf("(%v) Connection closed, message: %v", connCtx.User, err)
 			return
 		}
 	}
@@ -169,11 +171,15 @@ func (connCtx *SshConnContext) eventLoop(containerTemplate *daemon.ContainerConf
 	bus.Subscribe(ClientExecEvent, ptyEventHandler)
 	bus.Subscribe(ClientResizeEvent, ptyEventHandler)
 	bus.Subscribe(ClientPipeBrokenEvent, ptyEventHandler)
-	bus.Subscribe(ClientSubsystemRequestEvent, func(_, evt *daemon.ServerEvent) {
+	bus.Subscribe(ClientSubsystemRequestEvent, func(_ string, evt *daemon.ServerEvent) {
 		service := SubsystemRequest(evt)
-		log.Printf("(%v) Received a subsystem request for %v, but unsupported yet :(", connCtx.User, service)
+		if service == "sftp" {
+			log.Println("SFTP requested, launching /usr/sbin/bubble-sftp inside the container...")
+			connCtx.EventBus.Publish(ClientExecEvent, NewExecEvent(true, []string{"/usr/sbin/bubble-sftp"}))
+		} else {
+			log.Printf("(%v) Received a subsystem request for %v, but unsupported yet :(", connCtx.User, service)
+		}
 	})
-
 }
 
 func (ptys *PtySession) onPtyEvent(evt *daemon.ServerEvent, containerTemplate *daemon.ContainerConfig) error {

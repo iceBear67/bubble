@@ -24,8 +24,7 @@ type Config struct {
 }
 
 type ManagerServer struct {
-	Address    string `yaml:"address"`
-	SubnetCIDR string `yaml:"subnet-cidr"`
+	Address string `yaml:"address"`
 }
 
 type AccessConfig struct {
@@ -58,8 +57,7 @@ func LoadConfig(path *string) (*Config, error) {
 		GlobalShareDir:  "",
 		Runtime:         "",
 		Manager: ManagerServer{
-			Address:    "0.0.0.0:7684",
-			SubnetCIDR: "127.17.0.0/16",
+			Address: "0.0.0.0:7684",
 		},
 		Templates:     make(map[string]ContainerConfig),
 		AccessControl: make(map[string]AccessConfig),

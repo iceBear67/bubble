@@ -56,6 +56,7 @@ func (connCtx *SshConnContext) RedirectToContainer(
 	go func() {
 		_, _ = io.Copy(*conn, hijackedResp.Reader)
 		connCtx.EventBus.Publish(ClientPipeBrokenEvent, NewBrokenPipeEvent(id))
+		(*connCtx.Conn).Close()
 	}()
 	return func() {
 		hijackedResp.Close()

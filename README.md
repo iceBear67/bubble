@@ -62,6 +62,13 @@ keys:
   icybear: 
     - "...."
 
+# Manager server helps you managing container itself from the container inside.
+# It starts a HTTP server on that port and listens signal from containers who enabled manager.
+# The server has a IP whitelist which is maintained by bubble. 
+manager:
+  # Changing this to 127.0.0.1 will break everything.
+  address: "0.0.0.0:7684"
+
 # Since 0.2, accesses to containers should be explicitly declared to named keys
 access-control:
   icybear: 
@@ -108,7 +115,17 @@ $ client
 Usage: client <destroy|stop> 
 ```
 
+## SFTP
+
+Due to the isolation nature of containers, bubble cannot interact files within your containers directly. However, SFTP communicates over stdin/stdout, which yields some workaround:
+1. Link your sftp-server implementation to `/usr/sbin/bubble-sftp`. Bubble will execute this executable when sftp is requested.
+2. For containers that aren't specialized for using in bubble, add option `-s /path/to/sftp-server` to sftp cli.
+
+## Port mapping
+
+This feature is very experimental, check the usage from bubble client script.
+
 # Roadmap
- - Support SFTP.
+ - ~~Support SFTP.~~ Implemented.
    - You can install `openssh-sftp-server` (debian) on your container then use `-s /usr/lib/openssh/sftp-server` on your sftp commandline.
- - Port mapping
+ - ~~Port mapping~~ Implemented.
