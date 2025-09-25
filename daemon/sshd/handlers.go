@@ -96,7 +96,6 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 	hasPty := false
 	for req := range requests {
-		println(req.Type)
 		switch req.Type {
 		case "shell":
 			if len(req.Payload) == 0 {
@@ -141,7 +140,6 @@ func (connCtx *SshConnContext) handleSubsystemRequest(req *ssh.Request) error {
 		return fmt.Errorf("illegal packet length found from user %v, conn %v", connCtx.User, connCtx.Conn)
 	}
 	name := string(req.Payload[4 : 4+nameLen])
-	println(name)
 	connCtx.EventBus.Publish(ClientSubsystemRequestEvent, NewSubsystemRequest(name))
 	return nil
 }

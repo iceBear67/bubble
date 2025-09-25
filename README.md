@@ -65,6 +65,7 @@ keys:
 # Manager server helps you managing container itself from the container inside.
 # It starts a HTTP server on that port and listens signal from containers who enabled manager.
 # The server has a IP whitelist which is maintained by bubble. 
+# Since 0.3, manager server has deprecated unix-socket and turned to TCP. 
 manager:
   # Changing this to 127.0.0.1 will break everything.
   address: "0.0.0.0:7684"
@@ -122,7 +123,6 @@ Due to the isolation nature of containers, bubble cannot interact files within y
 2. For containers that aren't specialized for using in bubble, add option `-s /path/to/sftp-server` to sftp cli.
 
 ## Port mapping
-
 This feature is very experimental, check the usage from bubble client script.
 
 # Roadmap

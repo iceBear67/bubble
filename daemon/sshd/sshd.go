@@ -168,6 +168,7 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 					key := allowedKeys[i]
 					if key == nil {
 						println("key is null")
+						continue
 					}
 					if bytes.Equal(key.Marshal(), incomingKey.Marshal()) {
 						access, exists := config.AccessControl[name]
