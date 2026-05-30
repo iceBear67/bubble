@@ -73,9 +73,11 @@ func (sctx *SshServerContext) Serve(address string) {
 			log.Println("Failed to accept connection:", err)
 			continue
 		}
+		ctx, cancel := context.WithCancel(sctx.context)
 		connCtx := &SshConnContext{
 			ServerContext: sctx,
-			context:       sctx.context,
+			context:       ctx,
+			cancel:        cancel,
 			Conn:          nil,
 			EventBus:      eventbus.New(),
 		}

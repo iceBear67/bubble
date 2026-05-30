@@ -23,6 +23,8 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 	connCtx.ServerContext.EventBus.Publish(ConnectionEstablishedEvent, NewConnectionEstablishedEvent(connCtx))
 	go connCtx.signalHandler(conn)
 	exitHandle := func() {
+		connCtx.cancel()
+		connCtx.EventBus.Close()
 		err := (conn).Close()
 		if err != nil && !connCtx.ServerContext.shuttingDown {
 			log.Printf("Failed to close connection: %v", err)
@@ -38,6 +40,7 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 			if !connCtx.ServerContext.shuttingDown {
 				log.Println("Failed to accept channel:", err)
 			}
+			exitHandle()
 			return
 		}
 		connCtx.Conn = &channel
@@ -56,6 +59,8 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		})
 		return
 	}
+	// Non-session channel — clean up
+	exitHandle()
 }
 
 func (connCtx *SshConnContext) signalHandler(listener net.Conn) {

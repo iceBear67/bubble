@@ -15,6 +15,7 @@ type SshConnContext struct {
 	ServerContext *SshServerContext
 	EventBus      *eventbus.EventBus
 	context       context.Context
+	cancel        context.CancelFunc
 	User          string
 	Conn          *ssh.Channel
 	Interactive   bool
