@@ -45,6 +45,14 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		}
 		connCtx.Conn = &channel
 		connCtx.User = sshConn.User()
+		connCtx.ACLUser = ""
+		perm := sshConn.Permissions
+		if perm != nil && perm.Extensions != nil {
+			if aclUser, ok := perm.Extensions["user"]; ok {
+				connCtx.ACLUser = aclUser
+			}
+		}
+
 		containerId, containerTemplate, err := connCtx.prepareSession()
 		if err != nil || containerId == nil {
 			connCtx.logToBoth(fmt.Sprintf("Failed to handle session: %v", err))
@@ -70,10 +78,14 @@ func (connCtx *SshConnContext) signalHandler(listener net.Conn) {
 	}
 }
 
+func (connCtx *SshConnContext) deriveContainerName() string {
+	return connCtx.ACLUser + "-" + connCtx.User + "-1"
+}
+
 func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.ContainerConfig, err error) {
 	sctx := connCtx.ServerContext
 	user := connCtx.User
-	containerName := "workspace-" + user //todo refactor
+	containerName := connCtx.deriveContainerName()
 	containerTemplate, err := sctx.AppConfig.GetTemplateByUser(user)
 	if err != nil {
 		log.Printf("Cannot find template for channel issued by %v: %v\n", connCtx.User, err)

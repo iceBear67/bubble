@@ -178,13 +178,17 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 							return nil, fmt.Errorf("unauthorized: acl not set")
 						}
 						if access.CanAccess(conn.User()) {
-							return nil, nil
+							return &ssh.Permissions{
+								Extensions: map[string]string{
+									"user": name,
+								},
+							}, nil
 						}
 						return nil, fmt.Errorf("unauthorized: access not granted")
 					}
 				}
 			}
-			return nil, fmt.Errorf("unauthorized: incomingKey not enrolled.")
+			return nil, fmt.Errorf("unauthorized: incomingKey not enrolled")
 		}}
 	} else {
 		log.Println("NO CLIENT AUTH IS ENABLED! YOU SHALL ONLY USE THIS IN TEST ENVIRONMENT.")

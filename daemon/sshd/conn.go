@@ -17,6 +17,7 @@ type SshConnContext struct {
 	context       context.Context
 	cancel        context.CancelFunc
 	User          string
+	ACLUser       string
 	Conn          *ssh.Channel
 	Interactive   bool
 }
