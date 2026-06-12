@@ -201,7 +201,7 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 	return sshConfig
 }
 
-func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, containerTemplate *daemon.ContainerConfig) (*string, error, bool) {
+func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, labels map[string]string, containerTemplate *daemon.ContainerConfig) (*string, error, bool) {
 	dockerClient := sctx.DockerClient
 	exists, status, containerID := daemon.ContainerExists(dockerClient, containerName)
 	isNew := false
@@ -213,6 +213,7 @@ func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDi
 			sctx.AppConfig.GlobalShareDir,
 			sctx.AppConfig.Network,
 			sctx.AppConfig.Runtime,
+			labels,
 			containerTemplate,
 		)
 		if err != nil {

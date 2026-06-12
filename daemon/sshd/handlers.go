@@ -53,6 +53,27 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 			}
 		}
 
+		// check
+		containerName := connCtx.deriveContainerName()
+		exists, _, _ := daemon.ContainerExists(connCtx.ServerContext.DockerClient, containerName)
+		reqsChan := make(chan *ssh.Request)
+		go func() {
+		o:
+			for {
+				select {
+				case <-connCtx.context.Done():
+					break o
+				case req := <-reqs:
+					reqsChan <- req
+				}
+			}
+		}()
+		if !exists {
+			if connCtx.initMenu(reqsChan) != nil {
+				exitHandle()
+				return
+			}
+		}
 		containerId, containerTemplate, err := connCtx.prepareSession()
 		if err != nil || containerId == nil {
 			connCtx.logToBoth(fmt.Sprintf("Failed to handle session: %v", err))
@@ -61,7 +82,7 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		}
 
 		connCtx.registerEvents(containerTemplate, *containerId)
-		go connCtx.handleRequests(reqs)
+		go connCtx.handleRequests(reqsChan)
 		connCtx.EventBus.Subscribe(ClientPipeBrokenEvent, func(_ string, _ *daemon.ServerEvent) {
 			exitHandle()
 		})
@@ -92,9 +113,15 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 		return
 	}
 	connCtx.logToBoth(fmt.Sprintf("Preparing container for %v...", connCtx.User))
+	labels := make(map[string]string, 2)
+	labels["bubble_user"] = connCtx.User
+	if connCtx.ACLUser != "" {
+		labels["bubble_acl_user"] = connCtx.ACLUser
+	}
 	containerId, erro, _ := connCtx.ServerContext.PrepareContainer(
 		containerName,
 		connCtx.ServerContext.GetHostWorkspaceDir(connCtx.User),
+		labels,
 		containerTemplate)
 	if erro != nil || containerId == nil {
 		erro = fmt.Errorf("error while preparing container: %v", erro)
@@ -114,6 +141,9 @@ func (connCtx *SshConnContext) prepareSession() (id *string, config *daemon.Cont
 func (connCtx *SshConnContext) handleRequests(requests <-chan *ssh.Request) {
 	hasPty := false
 	for req := range requests {
+		if req == nil {
+			break
+		}
 		switch req.Type {
 		case "shell":
 			if len(req.Payload) == 0 {

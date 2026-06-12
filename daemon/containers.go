@@ -89,6 +89,7 @@ func CreateContainerFromTemplate(
 	globalShareDir string,
 	networkGroup string,
 	runtime string,
+	labels map[string]string,
 	containerTemplate *ContainerConfig,
 ) (string, error) {
 	ctx := context.Background()
@@ -98,6 +99,7 @@ func CreateContainerFromTemplate(
 		Cmd:      containerTemplate.Cmd,
 		Hostname: containerName,
 		Env:      containerTemplate.Env,
+		Labels:   labels,
 	}
 	var volumes []string
 	copy(volumes, containerTemplate.Volumes)
