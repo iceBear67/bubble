@@ -13,6 +13,7 @@ import (
 type Config struct {
 	Address         string                     `yaml:"address"`
 	Network         string                     `yaml:"network-group"`
+	AuthServer      string                     `yaml:"auth-server"`
 	Keys            map[string][]string        `yaml:"keys"`
 	ServerKey       string                     `yaml:"server-key-file"`
 	WorkspaceParent string                     `yaml:"workspace-parent"`

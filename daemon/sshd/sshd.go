@@ -5,9 +5,14 @@ import (
 	"bubble/daemon/manager"
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -130,6 +135,8 @@ func loadPrivateKey(path string) ssh.Signer {
 	return private
 }
 
+type pkcb = func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error)
+
 func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig {
 	namedKeys := make(map[string][]ssh.PublicKey)
 	for k, v := range config.Keys {
@@ -144,31 +151,38 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 		}
 		namedKeys[k] = keys
 	}
-	var sshConfig *ssh.ServerConfig
+	var sshConfig = &ssh.ServerConfig{}
+
+	var callbacks = make([]pkcb, 0)
 	if len(namedKeys) != 0 {
-		sshConfig = &ssh.ServerConfig{PublicKeyCallback: func(conn ssh.ConnMetadata, incomingKey ssh.PublicKey) (*ssh.Permissions, error) {
-			if incomingKey == nil {
-				return nil, fmt.Errorf("unauthorized: key not present")
+		callbacks = append(callbacks, authConfiguredKeypair(namedKeys))
+	}
+	if config.AuthServer != "" {
+		callbacks = append(callbacks, authRemoteConfiguredKeypair(config.AuthServer))
+	}
+
+	finalPkcb := func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+		if key == nil {
+			return nil, fmt.Errorf("unauthorized: key not present")
+		}
+		var finalErr error = nil
+		for _, callback := range callbacks {
+			perm, err := callback(conn, key)
+			if err == nil {
+				return perm, nil
 			}
-			for name, allowedKeys := range namedKeys {
-				for i := range allowedKeys {
-					key := allowedKeys[i]
-					if key == nil {
-						println("key is null")
-						continue
-					}
-					if bytes.Equal(key.Marshal(), incomingKey.Marshal()) {
-						return &ssh.Permissions{
-							Extensions: map[string]string{
-								"user": name,
-							},
-						}, nil
-					}
-				}
+			if finalErr == nil {
+				finalErr = err
+			} else {
+				finalErr = errors.Join(finalErr, err)
 			}
-			return nil, fmt.Errorf("unauthorized: incomingKey not enrolled")
-		}}
-	} else {
+		}
+		return nil, finalErr
+	}
+
+	sshConfig.PublicKeyCallback = finalPkcb
+
+	if len(callbacks) == 0 {
 		log.Println("NO CLIENT AUTH IS ENABLED! YOU SHALL ONLY USE THIS IN TEST ENVIRONMENT.")
 		sshConfig = &ssh.ServerConfig{
 			NoClientAuth: true,
@@ -177,6 +191,68 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 	sshConfig.AddHostKey(private)
 
 	return sshConfig
+}
+
+func authRemoteConfiguredKeypair(authServer string) pkcb {
+	return func(conn ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+		payload, err := json.Marshal(map[string]string{
+			"key":  base64.StdEncoding.EncodeToString(key.Marshal()),
+			"user": conn.User(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		_resp, err := http.Post(authServer, "application/json", bytes.NewBuffer(payload))
+		if err != nil {
+			return nil, err
+		}
+		defer _resp.Body.Close()
+		if _resp.StatusCode != 200 {
+			return nil, fmt.Errorf("auth server returned non-200 status code: %d", _resp.StatusCode)
+		}
+		body, err := io.ReadAll(_resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		var resp struct {
+			User string `json:"user"`
+		}
+		err = json.Unmarshal(body, &resp)
+		if err != nil {
+			return nil, err
+		}
+		if resp.User == "" {
+			log.Println("auth server returned empty user for key", base64.StdEncoding.EncodeToString(key.Marshal()))
+			return nil, fmt.Errorf("auth server returned empty user")
+		}
+		return &ssh.Permissions{
+			Extensions: map[string]string{
+				"user": resp.User,
+			},
+		}, nil
+	}
+}
+
+func authConfiguredKeypair(namedKeys map[string][]ssh.PublicKey) pkcb {
+	return func(conn ssh.ConnMetadata, incomingKey ssh.PublicKey) (*ssh.Permissions, error) {
+		for name, allowedKeys := range namedKeys {
+			for i := range allowedKeys {
+				key := allowedKeys[i]
+				if key == nil {
+					println("key is null")
+					continue
+				}
+				if bytes.Equal(key.Marshal(), incomingKey.Marshal()) {
+					return &ssh.Permissions{
+						Extensions: map[string]string{
+							"user": name,
+						},
+					}, nil
+				}
+			}
+		}
+		return nil, fmt.Errorf("unauthorized: incomingKey not enrolled")
+	}
 }
 
 func (sctx *SshServerContext) PrepareContainer(containerName string, workspaceDir string, labels map[string]string, containerTemplate *daemon.ContainerConfig) (*string, error, bool) {

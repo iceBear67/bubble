@@ -55,6 +55,12 @@ workspace-parent: "workspace"
 
 global-share-dir: "global"
 
+# An http server that accepts JSON payload POST in {key: "base64 std encoded ssh key", user: "username"}
+# Response should be {"user": "identity name"} and status code 200 to accept the request. Otherwise, the user connection will be rejected.
+# This has a lower priority than `keys`
+# Since 0.3
+auth-server: "http://my-auth-server"
+
 # List of allowed SSH keys (~/.sshd/authorized_keys).
 # If empty, anyone can connect.
 # Since 0.2, keys should be named.
@@ -62,7 +68,7 @@ keys:
   icybear: 
     - "...."
 
-# Manager server helps you managing container itself from the container inside.
+# Manager server helps you to manage container itself from the container inside.
 # It starts a HTTP server on that port and listens signal from containers who enabled manager.
 # The server has a IP whitelist which is maintained by bubble. 
 # Since 0.3, manager server has deprecated unix-socket and turned to TCP. 
