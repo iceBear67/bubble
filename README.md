@@ -70,12 +70,6 @@ manager:
   # Changing this to 127.0.0.1 will break everything.
   address: "0.0.0.0:7684"
 
-# Since 0.2, accesses to containers should be explicitly declared to named keys
-access-control:
-  icybear: 
-    patterns:
-      - "^icybear$"
-
 # Container configurations based on SSH username.
 templates:
   ".*":  # Regex matching the username.

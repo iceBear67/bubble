@@ -14,7 +14,6 @@ type Config struct {
 	Address         string                     `yaml:"address"`
 	Network         string                     `yaml:"network-group"`
 	Keys            map[string][]string        `yaml:"keys"`
-	AccessControl   map[string]AccessConfig    `yaml:"access-control"`
 	ServerKey       string                     `yaml:"server-key-file"`
 	WorkspaceParent string                     `yaml:"workspace-parent"`
 	GlobalShareDir  string                     `yaml:"global-share-dir"`
@@ -32,14 +31,14 @@ type AccessConfig struct {
 }
 
 type ContainerConfig struct {
-	EnableManager  bool                 `yaml:"enable-manager"`
-	Image          string               `yaml:"image"`
-	Exec           []string             `yaml:"exec"`
-	Cmd            []string             `yaml:"cmd"`
-	Env            []string             `yaml:"env"`
-	Volumes        []string             `yaml:"volumes"`
-	Privilege bool `yaml:"privilege"`
-	Rm        bool `yaml:"rm"`
+	EnableManager bool     `yaml:"enable-manager"`
+	Image         string   `yaml:"image"`
+	Exec          []string `yaml:"exec"`
+	Cmd           []string `yaml:"cmd"`
+	Env           []string `yaml:"env"`
+	Volumes       []string `yaml:"volumes"`
+	Privilege     bool     `yaml:"privilege"`
+	Rm            bool     `yaml:"rm"`
 }
 
 func LoadConfig(path *string) (*Config, error) {
@@ -53,8 +52,7 @@ func LoadConfig(path *string) (*Config, error) {
 		Manager: ManagerServer{
 			Address: "0.0.0.0:7684",
 		},
-		Templates:     make(map[string]ContainerConfig),
-		AccessControl: make(map[string]AccessConfig),
+		Templates: make(map[string]ContainerConfig),
 	}
 	file, err := os.Open(*path)
 	if err != nil {

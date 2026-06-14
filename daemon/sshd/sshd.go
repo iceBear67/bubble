@@ -158,18 +158,11 @@ func setupSSHConfig(private ssh.Signer, config *daemon.Config) *ssh.ServerConfig
 						continue
 					}
 					if bytes.Equal(key.Marshal(), incomingKey.Marshal()) {
-						access, exists := config.AccessControl[name]
-						if !exists {
-							return nil, fmt.Errorf("unauthorized: acl not set")
-						}
-						if access.CanAccess(conn.User()) {
-							return &ssh.Permissions{
-								Extensions: map[string]string{
-									"user": name,
-								},
-							}, nil
-						}
-						return nil, fmt.Errorf("unauthorized: access not granted")
+						return &ssh.Permissions{
+							Extensions: map[string]string{
+								"user": name,
+							},
+						}, nil
 					}
 				}
 			}
