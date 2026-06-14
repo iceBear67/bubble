@@ -38,14 +38,8 @@ type ContainerConfig struct {
 	Cmd            []string             `yaml:"cmd"`
 	Env            []string             `yaml:"env"`
 	Volumes        []string             `yaml:"volumes"`
-	Privilege      bool                 `yaml:"privilege"`
-	Rm             bool                 `yaml:"rm"`
-	PortForwarding *PortForwarderConfig `yaml:"port-forwarding"`
-}
-
-type PortForwarderConfig struct {
-	MinPort int `yaml:"min-port"`
-	MaxPort int `yaml:"max-port"`
+	Privilege bool `yaml:"privilege"`
+	Rm        bool `yaml:"rm"`
 }
 
 func LoadConfig(path *string) (*Config, error) {

@@ -102,10 +102,7 @@ templates:
     # Warning: This introduces security risks.
     privilege: true
 
-    # Enable port forwarding. Containers may send a PORT request to manager server to open ports.
-    port-forwarding:
-      min-port: 0
-      max-port: 65535
+
 ```
 
 # Client
@@ -122,10 +119,6 @@ Due to the isolation nature of containers, bubble cannot interact files within y
 1. Link your sftp-server implementation to `/usr/sbin/bubble-sftp`. Bubble will execute this executable when sftp is requested.
 2. For containers that aren't specialized for using in bubble, add option `-s /path/to/sftp-server` to sftp cli.
 
-## Port mapping
-This feature is very experimental, check the usage from bubble client script.
-
 # Roadmap
  - ~~Support SFTP.~~ Implemented.
    - You can install `openssh-sftp-server` (debian) on your container then use `-s /usr/lib/openssh/sftp-server` on your sftp commandline.
- - ~~Port mapping~~ Implemented.

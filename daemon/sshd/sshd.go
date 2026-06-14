@@ -2,7 +2,6 @@ package sshd
 
 import (
 	"bubble/daemon"
-	"bubble/daemon/forwarder"
 	"bubble/daemon/manager"
 	"bytes"
 	"context"
@@ -96,7 +95,6 @@ func (sctx *SshServerContext) signalListener(listener net.Listener) {
 }
 
 func (sctx *SshServerContext) eventHandler() {
-	openedPorts := make(map[int]*struct{})
 	err := sctx.EventBus.Subscribe(ConnectionEstablishedEvent, func(_ string, _ *daemon.ServerEvent) {
 		sctx.wg.Add(1)
 	})
@@ -105,19 +103,6 @@ func (sctx *SshServerContext) eventHandler() {
 	}
 	err = sctx.EventBus.Subscribe(ConnectionCloseEvent, func(_ string, _ *daemon.ServerEvent) {
 		sctx.wg.Add(-1)
-	})
-	if err != nil {
-		panic(err)
-	}
-	err = sctx.EventBus.Subscribe(forwarder.PortForwardRequestEvent, func(_ string, ev *daemon.ServerEvent) {
-		from, to, dst := forwarder.ForwardRequest(ev)
-		log.Println("Received port forwarding request from ", dst, ": (host)", from, " -> (guest)", to)
-		if _, ok := openedPorts[from]; ok {
-			log.Println("Port conflict: ", from, " -> ", to)
-			return
-		}
-		openedPorts[from] = &struct{}{}
-		go forwarder.PortForward(sctx.context, dst, from, to)
 	})
 	if err != nil {
 		panic(err)

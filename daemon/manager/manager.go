@@ -2,13 +2,10 @@ package manager
 
 import (
 	"bubble/daemon"
-	"bubble/daemon/forwarder"
 	"context"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types/container"
@@ -17,23 +14,17 @@ import (
 )
 
 const (
-	containerMethodKill       = "KILL"
-	containerMethodStop       = "STOP"
-	containerMethodDestroy    = "DESTROY"
-	containerMethodExposePort = "PORT"
+	containerMethodKill    = "KILL"
+	containerMethodStop    = "STOP"
+	containerMethodDestroy = "DESTROY"
 )
 
 type ManagerContext struct {
 	DockerClient  *client.Client
 	Context       context.Context
 	IpToContainer map[string]string
-	shuttingDown  bool
-	listener      *net.Listener
-	forwarder     *forwarder.PortForwarderConfig
-}
-
-func (mctx *ManagerContext) AllowPortForwarding(forwarder *forwarder.PortForwarderConfig) {
-	mctx.forwarder = forwarder
+	shuttingDown bool
+	listener     *net.Listener
 }
 
 func StartManagementServer(
@@ -46,7 +37,6 @@ func StartManagementServer(
 		context,
 		make(map[string]string, 16),
 		false,
-		nil,
 		nil,
 	}
 	log.Printf("Starting management server")
@@ -95,33 +85,6 @@ func (ctx *ManagerContext) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case containerMethodKill:
 		log.Printf("Received KILL signal from container %v", containerId)
 		ctx.killContainer(containerId)
-	case containerMethodExposePort:
-		log.Printf("Receive PORT forwarding request from container %v", containerId)
-		if ctx.forwarder == nil {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		err := r.ParseForm()
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("Invalid body"))
-			return
-		}
-		from := r.Form.Get("from")
-		fromPort, err := strconv.Atoi(from)
-		if err != nil || fromPort < ctx.forwarder.AllowLowest || fromPort > ctx.forwarder.AllowHighest {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte(fmt.Sprintf("From port %v isn't integer. Min: %v, max: %v", fromPort, ctx.forwarder.AllowLowest, ctx.forwarder.AllowHighest)))
-			return
-		}
-		to := r.Form.Get("to")
-		toPort, err := strconv.Atoi(to)
-		if err != nil || (toPort < 1 || toPort > 65535) {
-			w.WriteHeader(http.StatusBadRequest)
-			_, _ = w.Write([]byte("Invalid destination port"))
-			return
-		}
-		ctx.forwarder.Start(fromPort, toPort, r.RemoteAddr)
 	}
 	w.WriteHeader(http.StatusOK)
 }

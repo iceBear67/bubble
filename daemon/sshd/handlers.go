@@ -58,6 +58,7 @@ func (connCtx *SshConnContext) handleConnection(conn net.Conn, sshConfig *ssh.Se
 		exists, _, _ := daemon.ContainerExists(connCtx.ServerContext.DockerClient, containerName)
 		reqsChan := make(chan *ssh.Request)
 		go func() {
+			defer close(reqsChan)
 		o:
 			for {
 				select {

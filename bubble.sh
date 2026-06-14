@@ -30,19 +30,7 @@ case "$1" in
   "kill")
     send_signal "KILL"
   ;;
-  "expose")
-    if test ! -z "$2"; then
-      echo "expose <hostPort> <toPort>"
-      return
-    elif test ! -z "$3"; then
-      echo "expose <hostPort> <toPort>"
-      return
-    fi
-    send_signal "PORT" "from=$2&to=$3"
-  ;;
   *)
-    echo "Usage: bubble <destroy|stop|kill|expose>"
-    echo "  For port forwarding: expose <hostPort> <toPort>"
-    echo "  Port forwarding must be explicitly enabled in daemon config."
+    echo "Usage: bubble <destroy|stop|kill>"
   ;;
 esac
