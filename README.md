@@ -2,20 +2,6 @@
 An SSH daemon that forwards terminal to a docker container, or create a new one on-demand.  
 Work in progress. More tests needed.
 
-# Build
-Ensure you have Go 1.24.1 (tested) and Git installed.
-
-```bash
-$ git clone https://github.com/iceBear67/bubble
-$ bash ./bubble/build.sh
-building client.go
-building daemon.go
-$ ls target
-client daemon
-```
-
-By default, artifacts are built with CGO disabled, making them runnable without glibc.
-
 # Usage
 
 Access to the Docker socket and a pre-generated SSH private key is required.

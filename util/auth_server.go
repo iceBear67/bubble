@@ -189,6 +189,11 @@ func loadUsers(rootDir string) (map[string][]ssh.PublicKey, error) {
 		name := entry.Name()
 		path := filepath.Join(rootDir, name)
 
+		if !strings.HasSuffix(name, ".key") {
+			continue
+		}
+		name = strings.TrimSuffix(name, ".key")
+
 		data, err := os.ReadFile(path)
 		if err != nil {
 			log.Printf("warning: failed to read %s: %v", path, err)
