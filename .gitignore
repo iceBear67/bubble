@@ -4,3 +4,4 @@ config.yml
 ssh_host_key
 ssh_host_key.pub
 .idea
+reasonix.toml
