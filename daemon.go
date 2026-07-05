@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,6 +27,15 @@ func main() {
 	config, err := daemon.LoadConfig(configPath)
 	if err != nil {
 		log.Fatalf("Failed to open config file: %v", err)
+	}
+
+	if config.Pprof.Enabled {
+		go func() {
+			log.Printf("Starting pprof server on %s", config.Pprof.Address)
+			if err := http.ListenAndServe(config.Pprof.Address, nil); err != nil {
+				log.Printf("pprof server error: %v", err)
+			}
+		}()
 	}
 
 	dockerClient, err := daemon.SetupDockerClient()

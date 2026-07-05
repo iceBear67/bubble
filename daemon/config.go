@@ -20,10 +20,16 @@ type Config struct {
 	GlobalShareDir  string                     `yaml:"global-share-dir"`
 	Runtime         string                     `yaml:"runtime"`
 	Manager         ManagerServer              `yaml:"manager"`
+	Pprof           PprofConfig                `yaml:"pprof"`
 	Templates       map[string]ContainerConfig `yaml:"templates"`
 }
 
 type ManagerServer struct {
+	Address string `yaml:"address"`
+}
+
+type PprofConfig struct {
+	Enabled bool   `yaml:"enabled"`
 	Address string `yaml:"address"`
 }
 
@@ -52,6 +58,10 @@ func LoadConfig(path *string) (*Config, error) {
 		Runtime:         "",
 		Manager: ManagerServer{
 			Address: "0.0.0.0:7684",
+		},
+		Pprof: PprofConfig{
+			Enabled: false,
+			Address: "127.0.0.1:6060",
 		},
 		Templates: make(map[string]ContainerConfig),
 	}
