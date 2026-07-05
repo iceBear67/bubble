@@ -3,7 +3,6 @@ package main
 import (
 	"bubble/daemon"
 	"bubble/daemon/sshd"
-	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -49,26 +48,7 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	go sshs.Serve(config.Address)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go signalHandler(sshs, sigChan)
-	handleCommand()
-}
-
-func handleCommand() {
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		scanner.Scan()
-		prompt := scanner.Text()
-		if err := scanner.Err(); err != nil {
-			log.Printf("Error reading input: %v", err)
-			continue
-		}
-		switch prompt {
-		case "stop":
-			pid := os.Getpid()
-			_ = syscall.Kill(pid, syscall.SIGTERM)
-			log.Println("Signal sent!")
-		}
-	}
+	signalHandler(sshs, sigChan)
 }
 
 func signalHandler(sshd *sshd.SshServerContext, sigChan chan os.Signal) {
